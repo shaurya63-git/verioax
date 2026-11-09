@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="40" viewBox="0 0 200 40" role="img" aria-label="TrustGuard AI">
+  <path d="M16 3 L28 8 V19 C28 27 22.8 33.2 16 36 C9.2 33.2 4 27 4 19 V8 Z" fill="#14294A" stroke="#4C8DF6" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M9.5 19.5 L14 24 L22.5 14.5" fill="none" stroke="#E6EDF7" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="38" y="26" font-family="IBM Plex Sans, Segoe UI, Helvetica Neue, Arial, sans-serif" font-size="18" font-weight="600" fill="#E6EDF7">TrustGuard<tspan dx="6" fill="#4C8DF6">AI</tspan></text>
+</svg>

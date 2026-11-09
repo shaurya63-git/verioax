@@ -1,0 +1,84 @@
+[server]
+enableStaticServing = true
+maxUploadSize = 15
+headless = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
+
+[theme]
+base = "dark"
+primaryColor = "#4C8DF6"
+backgroundColor = "#0F1A2B"
+secondaryBackgroundColor = "#17263D"
+textColor = "#E6EDF7"
+borderColor = "#263A5C"
+showWidgetBorder = true
+baseRadius = "0.5rem"
+buttonRadius = "0.45rem"
+linkColor = "#7FB0FF"
+linkUnderline = false
+baseFontSize = 15
+font = "IBM Plex Sans, sans-serif"
+headingFont = "IBM Plex Sans, sans-serif"
+headingFontWeights = [600, 600, 600, 600, 600, 600]
+codeFont = "IBM Plex Mono, monospace"
+codeFontSize = "0.86rem"
+codeBackgroundColor = "#122036"
+codeTextColor = "#B9D3FF"
+metricValueFontWeight = 600
+dataframeBorderColor = "#263A5C"
+dataframeHeaderBackgroundColor = "#17263D"
+# status colours (also used by st.badge / :red[] markdown)
+greenColor = "#2DBA6B"
+yellowColor = "#FAB219"
+orangeColor = "#EC835A"
+redColor = "#E05252"
+blueColor = "#4C8DF6"
+grayColor = "#8090A8"
+chartCategoricalColors = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
+chartSequentialColors = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab"]
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-400-normal.woff2"
+weight = 400
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-500-normal.woff2"
+weight = 500
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-600-normal.woff2"
+weight = 600
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Sans"
+url = "app/static/fonts/ibm-plex-sans-latin-700-normal.woff2"
+weight = 700
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "app/static/fonts/ibm-plex-mono-latin-400-normal.woff2"
+weight = 400
+style = "normal"
+
+[[theme.fontFaces]]
+family = "IBM Plex Mono"
+url = "app/static/fonts/ibm-plex-mono-latin-500-normal.woff2"
+weight = 500
+style = "normal"
+
+[theme.sidebar]
+backgroundColor = "#0B1422"
+secondaryBackgroundColor = "#15233A"
+borderColor = "#1F3150"

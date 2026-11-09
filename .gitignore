@@ -1,0 +1,28 @@
+# secrets - never commit real API keys
+.env
+.env.*
+!.env.example
+
+# runtime data: scan history, cache, preferences, user indicators (may contain redacted messages)
+data/runtime/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# tooling
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

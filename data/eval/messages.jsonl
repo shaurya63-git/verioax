@@ -1,0 +1,41 @@
+{"id": "T01", "label": "threat", "text": "Dear Ravi Kumar, your vehicle MH12AB1234 has a pending e-challan of Rs 590. Pay immediately to avoid licence suspension: https://echallan-pay.vip/pay", "sender": "+91 98765 43210", "note": "fake e-challan, lookalike domain"}
+{"id": "T02", "label": "threat", "text": "Aapke vahan MH01AB1234 par Rs 1000 ka e-challan pending hai. Turant bhugtan karein warna license suspend ho jayega: http://parivahan-echallan.top/pay", "sender": null, "note": "Hinglish e-challan"}
+{"id": "T03", "label": "threat", "text": "RTO Traffic Challan: a challan has been issued for your vehicle. Download RTO Challan.apk to view the details and pay.", "sender": "+91 70123 45678", "note": "APK delivery"}
+{"id": "T04", "label": "threat", "text": "Dear customer your SBI YONO account will be blocked today. Update PAN now: http://sbi-yono-kyc.in/update", "sender": null, "note": "bank KYC phishing"}
+{"id": "T05", "label": "threat", "text": "HDFC Bank: your 7,850 reward points expire today. Redeem now at https://hdfc-rewards.cc/redeem and enter your card details and CVV.", "sender": null, "note": "reward points phishing"}
+{"id": "T06", "label": "threat", "text": "Dear consumer your electricity power will be disconnected tonight at 9:30 pm because your previous month bill was not updated. Please immediately contact our electricity officer 9876543210.", "sender": "+91 98765 01234", "note": "electricity disconnection"}
+{"id": "T07", "label": "threat", "text": "Congratulations! You have won Rs 25,00,000 in KBC lucky draw. To claim, pay processing fee Rs 4,999 and send screenshot on WhatsApp 9876501234.", "sender": "+92 300 1234567", "note": "KBC lottery"}
+{"id": "T08", "label": "threat", "text": "Part time job! Earn Rs 3000 per day by liking YouTube videos. Registration fee Rs 500 only. Contact HR on Telegram.", "sender": null, "note": "task scam"}
+{"id": "T09", "label": "threat", "text": "Join our VIP stock tips group. Guaranteed returns of 10% daily! Message now: https://wa.me/919812345678", "sender": null, "note": "investment scam"}
+{"id": "T10", "label": "threat", "text": "India Post: your parcel is on hold due to incomplete address. Update your address within 24 hours: https://indiapost-track.top/update", "sender": null, "note": "delivery phishing"}
+{"id": "T11", "label": "threat", "text": "This is CBI. A parcel in your name contains drugs. You are under digital arrest. Stay on the video call and do not tell anyone. Transfer Rs 2,00,000 for verification.", "sender": "+855 12 345 678", "note": "digital arrest"}
+{"id": "T12", "label": "threat", "text": "Congrats! You received a cashback of Rs 2000. To receive the amount, approve the request and enter your UPI PIN.", "sender": null, "note": "UPI collect trick"}
+{"id": "T13", "label": "threat", "text": "Income Tax Department: you are eligible for a refund of Rs 15,490. Submit your bank account details at http://incometax-refund.xyz to receive it.", "sender": null, "note": "tax refund phishing"}
+{"id": "T14", "label": "threat", "text": "Hi, I accidentally sent my OTP to your number. Please share the OTP you just received, it's urgent.", "sender": "+91 81234 56789", "note": "OTP transfer"}
+{"id": "T15", "label": "threat", "text": "Your international parcel is held at Delhi customs. Pay customs clearance fee of Rs 8,500 today to release it.", "sender": null, "note": "customs fee"}
+{"id": "T16", "label": "threat", "text": "आपके वाहन का चालान लंबित है। तुरंत भुगतान करें: https://echallan-gov.top/pay", "sender": null, "note": "Hindi e-challan"}
+{"id": "T17", "label": "threat", "text": "This is Paytm support. To resolve your KYC issue please install AnyDesk and share the code with us.", "sender": "+91 99887 66554", "note": "remote access"}
+{"id": "T18", "label": "threat", "text": "Traffic e-challan of Rs 500 generated for your vehicle. Pay before midnight: https://bit.ly/3echln", "sender": null, "note": "short link + authority"}
+{"id": "T19", "label": "threat", "text": "Pre-approved loan of Rs 5,00,000 at 0% interest! Pay processing fee Rs 2,999 to get instant approval.", "sender": null, "note": "loan fee"}
+{"id": "T20", "label": "threat", "text": "Amazon: you've won an iPhone 15 in our lucky draw! Claim your prize at https://amazon-gift.xyz before it expires.", "sender": null, "note": "brand prize phishing"}
+{"id": "H01", "label": "hoax", "text": "WhatsApp will start charging from tomorrow. Forward this message to 10 groups to keep your account free!", "sender": null, "note": "chain message"}
+{"id": "H02", "label": "hoax", "text": "Breaking news: Government is giving free laptops to all students. Register now and share with all groups!", "sender": null, "note": "free scheme"}
+{"id": "H03", "label": "hoax", "text": "Big news! Lok Adalat on 13 December will waive 50% of all traffic challans. Forward to all your friends.", "sender": null, "note": "Lok Adalat rumour"}
+{"id": "H04", "label": "hoax", "text": "Drinking hot water with lemon kills the corona virus. Doctors don't want you to know. Forward to 10 people.", "sender": null, "note": "health"}
+{"id": "H05", "label": "hoax", "text": "From tomorrow all UPI transactions above Rs 2000 will be charged 1.1%. 100% true news, share as much as possible.", "sender": null, "note": "policy rumour"}
+{"id": "B01", "label": "benign", "text": "123456 is your OTP for login to NetBanking. Do not share it with anyone. -HDFC Bank", "sender": "VM-HDFCBK-T", "note": "bank OTP"}
+{"id": "B02", "label": "benign", "text": "Challan for vehicle MH12AB1234 issued on 02-11-2026. Check details and pay at https://echallan.parivahan.gov.in", "sender": "VM-PARIVA-G", "note": "official e-challan"}
+{"id": "B03", "label": "benign", "text": "Urgent: team meeting moved to 3pm today, please join immediately.", "sender": null, "note": "office urgency"}
+{"id": "B04", "label": "benign", "text": "Hey, call me when you're free. My new number is 9876501234.", "sender": "+91 98765 01234", "note": "friend"}
+{"id": "B05", "label": "benign", "text": "Your Amazon package will be delivered today. Track it at https://www.amazon.in/progress-tracker", "sender": "AX-AMAZON-S", "note": "delivery update"}
+{"id": "B06", "label": "benign", "text": "Your electricity bill of Rs 1,240 for October is due on 15 Nov. Pay via the official app or website. Ignore if already paid.", "sender": "VK-BESCOM-S", "note": "bill reminder"}
+{"id": "B07", "label": "benign", "text": "Beware of fake e-challan SMS. Traffic police never send payment links on WhatsApp. Check challans only at https://echallan.parivahan.gov.in. Never share your OTP with anyone.", "sender": null, "note": "awareness message"}
+{"id": "B08", "label": "benign", "text": "Hi Priya, thanks for applying to Infosys. Your interview is scheduled on 12 Nov at 11 am. Please bring your resume.", "sender": null, "note": "interview"}
+{"id": "B09", "label": "benign", "text": "Your Swiggy order is out for delivery. Share OTP 4821 with the delivery partner only at the time of delivery.", "sender": "JD-SWIGGY-S", "note": "delivery OTP"}
+{"id": "B10", "label": "benign", "text": "HDFC Bank: Rs 5,000 debited from A/c XX1234 on 08-Nov. Not you? Call 1800 202 6161.", "sender": "VM-HDFCBK-T", "note": "debit alert"}
+{"id": "B11", "label": "benign", "text": "PM-KISAN: the 21st installment of Rs 2,000 has been credited to your bank account. Check status at https://pmkisan.gov.in", "sender": "VM-PMKISN-G", "note": "govt credit"}
+{"id": "B12", "label": "benign", "text": "Mom, I reached Pune safely. Will call at night.", "sender": null, "note": "personal"}
+{"id": "B13", "label": "benign", "text": "You have received Rs 500 from Ravi via UPI. Ref no 512345678901.", "sender": "VM-PAYTMB-T", "note": "UPI credit"}
+{"id": "B14", "label": "benign", "text": "Dear customer, your KYC is due for periodic update. Please visit your nearest branch with your ID proof.", "sender": "VM-SBIBNK-S", "note": "KYC reminder without link"}
+{"id": "S01", "label": "suspicious", "text": "Check this out: https://bit.ly/4abcxyz", "sender": null, "note": "unverifiable short link"}
+{"id": "S02", "label": "suspicious", "text": "Your account needs verification. Click here: http://secure-login-verify.top/a", "sender": null, "note": "generic phishing, no brand"}

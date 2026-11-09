@@ -1,0 +1,31 @@
+# Seed indicators for TrustGuard's local IOC provider.
+# source: Cyble CRIL "RTO Scam Wave Continues" (Dec 2025) - fake e-Challan / courier / bank phishing infrastructure
+# Reference: https://cyble.com/blog/rto-scam-wave-continues/
+#
+# Indicators are stored defanged ([.]) so this file can't be clicked or auto-linked; TrustGuard refangs them on load.
+# Phishing domains are short-lived: treat this list as a historical seed and add fresh indicators on the
+# Threat Intelligence page (they are saved to data/runtime/iocs_user.txt, which is not committed).
+
+echala[.]vip
+echallaxzov[.]vip
+echallaxzrx[.]vip
+echallaxzm[.]vip
+echallaxzv[.]vip
+echallaxzx[.]vip
+echallx[.]vip
+echalln[.]vip
+echallv[.]vip
+delhirzexu[.]vip
+delhirzexi[.]vip
+delhizery[.]vip
+delhisery[.]vip
+dtdcspostb[.]vip
+dtdcspostv[.]vip
+dtdcspostc[.]vip
+hsbc-vnd[.]cc
+hsbc-vns[.]cc
+parisvaihen[.]icu
+parizvaihen[.]icu
+parvaihacn[.]icu
+101[.]33[.]78[.]145
+43[.]130[.]12[.]41
