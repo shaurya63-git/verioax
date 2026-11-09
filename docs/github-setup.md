@@ -1,4 +1,4 @@
-# Publishing TrustGuard AI on GitHub
+# Publishing Verioax on GitHub
 
 These steps take the project folder to a public GitHub repository with passing CI. Replace `<your-username>` with your
 GitHub username throughout.
@@ -42,7 +42,7 @@ ls -a            # you should see .gitignore, .env.example, README.md ... and NO
 git init -b main
 git add .
 git status                       # read the list: no .env, no data/runtime, no .venv
-git commit -m "TrustGuard AI: PII redaction + explainable scam, hoax and link analysis"
+git commit -m "Verioax: PII redaction + explainable scam, hoax and link analysis"
 ```
 
 ## 4. Create the GitHub repository and push
@@ -116,7 +116,7 @@ within minutes. Do this:
 
 Keep the claims to what the repository shows:
 
-- Built TrustGuard AI, a Python security tool that redacts personal data, then explains whether a message, link or
+- Built Verioax, a Python security tool that redacts personal data, then explains whether a message, link or
   document is a scam or hoax. It is aimed at Indian e-challan, KYC and UPI fraud. It has a FastAPI backend, a Streamlit
   UI, and 169 automated tests.
 - Designed a PII engine with checksum validation for Aadhaar, PAN, GSTIN and cards, typed placeholders, and a leak sweep

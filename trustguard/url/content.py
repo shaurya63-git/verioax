@@ -114,5 +114,5 @@ def inspect_html(body: bytes, page_url: str, content_type: str = "text/html") ->
     if re.search(r"(?:window\.)?location(?:\.href)?\s*=|location\.replace\(", html):
         page.notes.append("page contains a JavaScript redirect (not executed)")
     if len(visible) < 200 and not page.forms:
-        page.notes.append("very little visible content (the page may be built by JavaScript, which TrustGuard does not run)")
+        page.notes.append("very little visible content (the page may be built by JavaScript, which Verioax does not run)")
     return page

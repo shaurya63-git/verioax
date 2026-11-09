@@ -1,4 +1,4 @@
-# TrustGuard AI - everything needed to run the web app, the API and the tests.
+# Verioax - everything needed to run the web app, the API and the tests.
 # Equivalent to: pip install -e ".[all]"   (see pyproject.toml for the split into extras)
 # Tested with Python 3.10 and 3.13.
 

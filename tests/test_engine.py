@@ -126,3 +126,8 @@ def test_history_filters(engine):
     assert rows and all(r["overall_risk"] in ("HIGH", "CRITICAL") for r in rows)
     assert engine.store.list(category="government_impersonation")
     assert json.loads(engine.store.get(rows[0]["scan_id"]).model_dump_json())["scan_id"] == rows[0]["scan_id"]
+
+
+def test_scan_ids_use_the_product_prefix(engine):
+    import re
+    assert re.fullmatch(r"VX-\d{8}-[0-9A-F]{6}", engine.scan_message("hello there, see you at 5").result.scan_id)

@@ -20,7 +20,7 @@ files = [("PDF report", "pdf", "application/pdf", lambda: reports.analytics_pdf(
          ("JSON", "json", "application/json", lambda: reports.analytics_json(s).encode()),
          ("CSV (scan list)", "csv", "text/csv", lambda: reports.history_csv(c.list_scans(limit=1000)).encode())]
 for col, (label, ext, mime, fn) in zip(cols, files, strict=True):
-    col.download_button(label, fn(), file_name=f"trustguard-analytics.{ext}", mime=mime, on_click="ignore", icon=":material/download:",
+    col.download_button(label, fn(), file_name=f"verioax-analytics.{ext}", mime=mime, on_click="ignore", icon=":material/download:",
                         width="stretch", key=f"an_{ext}")
 if s["totals"]["demo_scans"]:
     st.caption(f"Includes {s['totals']['demo_scans']} sample (demo) scans.")
@@ -64,7 +64,7 @@ with tab_review:
         st.success("Nothing is waiting for review.", icon=":material/check_circle:")
 
 with tab_eval:
-    st.markdown("Run TrustGuard on its labelled regression set: fake e-challan, KYC, prize, task, investment and 'digital arrest' scams, "
+    st.markdown("Run Verioax on its labelled regression set: fake e-challan, KYC, prize, task, investment and 'digital arrest' scams, "
                 "hoax forwards, and genuine messages that look similar (bank OTPs, official e-challans, scam-awareness notices).")
     st.warning("These messages were written alongside the detection rules, so the numbers show whether the rules still behave as designed. "
                "They are not an independent measure of real-world accuracy.", icon=":material/info:")

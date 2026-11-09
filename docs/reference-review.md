@@ -1,11 +1,11 @@
 # Reference project review
 
-TrustGuard's PII workflow and UI were inspired by a reference project supplied at the start of this work: the *Cadence
+Verioax's PII workflow and UI were inspired by a reference project supplied at the start of this work: the *Cadence
 PII pipeline*, a case-study submission for document PII detection and redaction. This page has three parts:
 
 - what the reference does
-- which of its ideas TrustGuard adopted
-- what TrustGuard does differently
+- which of its ideas Verioax adopted
+- what Verioax does differently
 
 ## What the reference does
 
@@ -32,12 +32,12 @@ Its UI layout:
   review queue), then five tabs: *Document view*, *Original vs redacted*, *Exposure report*, *Extraction*, *Evidence*.
   The Evidence tab shows evaluation against hand-labelled gold sets.
 
-## Ideas TrustGuard adopted
+## Ideas Verioax adopted
 
-| Reference idea | How TrustGuard implements it |
+| Reference idea | How Verioax implements it |
 |---|---|
 | Typed, consistent placeholders | `[TYPE_001]`, zero-padded and stable within a scan. Phone numbers are compared by digits, so `+91 98765 43210` and `9876543210` share one placeholder. A bare first or last name reuses the placeholder of the detected person. |
-| Raw values only in a separate map | `RestrictedPII` / `RestrictedData` exist only in memory for the current scan. TrustGuard goes further: the map is never written to disk, never returned by the API and never offered as a download. |
+| Raw values only in a separate map | `RestrictedPII` / `RestrictedData` exist only in memory for the current scan. Verioax goes further: the map is never written to disk, never returned by the API and never offered as a download. |
 | Leak sweep that tries to break the output | Detectors re-run on the redacted text, plus a tolerant search for every removed value with up to 3 separator characters inserted. 0–3 rounds (default 2). Anything left after the last round sets the status to `blocked`. |
 | `clean` / `needs review` / `blocked` with reasons | The same three states, shown on the *Personal data* tab and in every report |
 | Review queue below a confidence threshold | `pii_review_threshold` (default 0.65), listed under *For review* |
@@ -50,7 +50,7 @@ Its UI layout:
 ## What is different, and why
 
 - **Messages first.** The reference is built around document layout (blocks, word boxes, OCR confidence per block).
-  TrustGuard's main inputs are SMS, WhatsApp messages, emails and links. Documents are supported through text extraction
+  Verioax's main inputs are SMS, WhatsApp messages, emails and links. Documents are supported through text extraction
   and OCR, but there is no word-box image redaction.
 - **Identifiers checked by checksum.** Aadhaar (Verhoeff), PAN (holder type), GSTIN (base-36 checksum), cards (Luhn),
   IBAN, vehicle registrations including BH series, and UPI IDs. Failed checksums lower confidence and send the finding to
@@ -65,5 +65,5 @@ Its UI layout:
 ## Originality
 
 **No source code was copied.** The reference repository has no licence file, which means all rights are reserved by
-default. TrustGuard re-implements the ideas above from scratch, with its own data structures, detectors, validators,
+default. Verioax re-implements the ideas above from scratch, with its own data structures, detectors, validators,
 tests and UI code. The reference is credited in the README.

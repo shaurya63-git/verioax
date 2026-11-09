@@ -81,4 +81,4 @@ with tab_keys:
         st.markdown(f":{'green' if ok else 'gray'}-badge[{'configured' if ok else 'not set'}] {name.replace('_', ' ').title()}")
     st.caption("See Threat intelligence > How to add API keys. Restart the app after editing .env.")
 
-st.caption(f"TrustGuard AI {__version__} - data folder: {get_settings().data_dir} - client: {c.kind}")
+st.caption(f"Verioax {__version__} - data folder: {get_settings().data_dir} - client: {c.kind}")

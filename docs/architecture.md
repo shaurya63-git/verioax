@@ -1,6 +1,6 @@
 # Architecture
 
-TrustGuard is one Python engine (`trustguard/`) with two front ends:
+Verioax is one Python engine (`trustguard/`) with two front ends:
 - a Streamlit web app (`app/`)
 - a FastAPI REST API (`api/`)
 

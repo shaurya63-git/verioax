@@ -1,4 +1,4 @@
-# TrustGuard AI: REST API + web app as two containers.
+# Verioax: REST API + web app as two containers.
 #   cp .env.example .env        (add any API keys you have; all optional)
 #   docker compose up --build
 #   web app: http://localhost:8501     API docs: http://localhost:8000/docs

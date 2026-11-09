@@ -37,7 +37,7 @@ def test_api_scan_history_and_reports(client):
     assert client.get("/v1/scans", params={"risk": ["HIGH", "CRITICAL"]}).json()
     pdf = client.get(f"/v1/scans/{sid}/report.pdf")
     assert pdf.status_code == 200 and pdf.content.startswith(b"%PDF")
-    assert client.get(f"/v1/scans/{sid}/report.md").text.startswith("# TrustGuard AI report")
+    assert client.get(f"/v1/scans/{sid}/report.md").text.startswith("# Verioax report")
     assert client.get("/v1/analytics").json()["totals"]["scans"] == 1
     assert client.delete(f"/v1/scans/{sid}").status_code == 200 and client.get(f"/v1/scans/{sid}").status_code == 404
 

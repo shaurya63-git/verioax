@@ -11,7 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 OUT = ROOT / "samples"
-BANNER = "TrustGuard AI sample file - synthetic content for testing. All names and numbers are made up."
+BANNER = "Verioax sample file - synthetic content for testing. All names and numbers are made up."
 
 KYC_EMAIL = [
     "From: SBI Alerts <alerts@sbi-secure-kyc.com>",
@@ -56,12 +56,15 @@ SMS_SCREENSHOT = [
 
 
 def make_pdf(path: Path) -> None:
+    from reportlab import rl_config
     from reportlab.lib.pagesizes import A4
     from reportlab.pdfgen import canvas
 
-    c = canvas.Canvas(str(path), pagesize=A4)
+    rl_config.useA85 = 0      # raw compressed streams: the PDF is binary, so Git never rewrites its line endings on Windows
+
+    c = canvas.Canvas(str(path), pagesize=A4, pageCompression=1)
     _, h = A4
-    c.setTitle("TrustGuard AI sample - KYC phishing email")
+    c.setTitle("Verioax sample - KYC phishing email")
     c.setFont("Helvetica-Oblique", 8.5)
     c.drawString(50, h - 40, BANNER)
     c.setFont("Helvetica", 10.5)
@@ -77,7 +80,7 @@ def make_docx(path: Path) -> None:
     from docx import Document
 
     doc = Document()
-    doc.core_properties.title = "TrustGuard AI sample - forwarded messages"
+    doc.core_properties.title = "Verioax sample - forwarded messages"
     doc.add_paragraph(BANNER).italic = True
     doc.add_heading("Messages to check", level=1)
     for meta, text in FORWARDS:

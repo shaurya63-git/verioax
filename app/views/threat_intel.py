@@ -5,7 +5,7 @@ import ui
 from client import ClientError
 from state import client
 
-ui.page_header("Threat intelligence", "The outside sources TrustGuard can ask about a link, whether each one is set up and working, "
+ui.page_header("Threat intelligence", "The outside sources Verioax can ask about a link, whether each one is set up and working, "
                                       "and the local list of known scam domains.")
 c = client()
 
@@ -54,14 +54,14 @@ Keys are read from environment variables or a `.env` file next to the app - neve
    - **Google Fact Check Tools** - used for the 'claims to check' section.
 3. Restart the app, then press **Test** here.
 
-Privacy: a lookup sends the link to that service. TrustGuard removes query parameters that carry personal data before any lookup.
+Privacy: a lookup sends the link to that service. Verioax removes query parameters that carry personal data before any lookup.
 """)
 
 st.subheader("Local indicator list")
 if c.kind != "local":
     st.info("The local list is managed on the API server (data/runtime/iocs_user.txt).")
 else:
-    st.caption(f"{c.seed_ioc_count()} published indicators ship with TrustGuard (fake e-challan, courier and bank phishing domains from a December 2025 "
+    st.caption(f"{c.seed_ioc_count()} published indicators ship with Verioax (fake e-challan, courier and bank phishing domains from a December 2025 "
                "campaign report). Add your own below - matches count as confirmed threat indicators.")
     with st.form("add_ioc", clear_on_submit=True, border=True):
         x, y = st.columns([3, 1], vertical_alignment="bottom")

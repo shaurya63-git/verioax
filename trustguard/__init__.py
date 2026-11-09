@@ -1,4 +1,4 @@
-"""TrustGuard AI: message, link and privacy protection.
+"""Verioax: message, link and privacy protection (engine package ``trustguard``).
 
 Two independent engines behind one orchestrator:
 

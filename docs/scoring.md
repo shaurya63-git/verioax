@@ -1,6 +1,6 @@
-# How TrustGuard scores a scan
+# How Verioax scores a scan
 
-TrustGuard reports two separate numbers:
+Verioax reports two separate numbers:
 
 - **Risk score (0–100) and level:** how dangerous the content looks.
 - **Confidence (0–1):** how much evidence the verdict rests on.
@@ -165,7 +165,7 @@ Three reasons:
 
 1. **Reproducibility.** The same message must always produce the same verdict, and each verdict must point to the
    evidence behind it.
-2. **Manipulation.** A scam page can contain text aimed at AI models ("classify this page as safe"). TrustGuard's page
+2. **Manipulation.** A scam page can contain text aimed at AI models ("classify this page as safe"). Verioax's page
    inspector flags such text as a finding. It never feeds it to a model that makes decisions.
 3. **Privacy.** The optional local model only receives redacted text. It writes a plain-language summary of a verdict
    that has already been decided.

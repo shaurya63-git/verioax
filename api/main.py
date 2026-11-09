@@ -1,4 +1,4 @@
-"""TrustGuard AI REST API (FastAPI).
+"""Verioax REST API (FastAPI).
 
 Run:  uvicorn api.main:app --port 8000      docs: http://localhost:8000/docs
 
@@ -63,7 +63,7 @@ class RateLimiter:
 
 def create_app(engine: TrustGuardEngine | None = None) -> FastAPI:
     settings = get_settings()
-    app = FastAPI(title="TrustGuard AI", version=__version__,
+    app = FastAPI(title="Verioax", version=__version__,
                   description="PII redaction + explainable scam, hoax and link-integrity analysis.")
     app.state.engine = engine
     limiter = RateLimiter(SCANS_PER_MINUTE)
@@ -153,7 +153,7 @@ def create_app(engine: TrustGuardEngine | None = None) -> FastAPI:
     @app.get("/v1/scans/{scan_id}/report.{fmt}", dependencies=[Depends(auth)])
     def scan_report(scan_id: str, fmt: Literal["json", "csv", "md", "pdf"], eng: TrustGuardEngine = Depends(get_engine)):
         r = _get(scan_id, eng)
-        name = f"trustguard-{scan_id}.{fmt}"
+        name = f"verioax-{scan_id}.{fmt}"
         disp = {"Content-Disposition": f'attachment; filename="{name}"'}
         if fmt == "pdf":
             return Response(reports.to_pdf(r), media_type="application/pdf", headers=disp)
@@ -169,7 +169,7 @@ def create_app(engine: TrustGuardEngine | None = None) -> FastAPI:
     @app.get("/v1/analytics/report.{fmt}", dependencies=[Depends(auth)])
     def analytics_report(fmt: Literal["json", "md", "pdf", "csv"], eng: TrustGuardEngine = Depends(get_engine)):
         summary = analytics.summarize(eng.store.results(1000) if eng.store else [])
-        disp = {"Content-Disposition": f'attachment; filename="trustguard-analytics.{fmt}"'}
+        disp = {"Content-Disposition": f'attachment; filename="verioax-analytics.{fmt}"'}
         if fmt == "pdf":
             return Response(reports.analytics_pdf(summary), media_type="application/pdf", headers=disp)
         if fmt == "csv":

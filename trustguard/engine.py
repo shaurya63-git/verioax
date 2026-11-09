@@ -99,7 +99,7 @@ def installation_key(data_dir: Path) -> bytes:
 
 def new_scan_id(now: datetime | None = None) -> str:
     now = now or datetime.now(timezone.utc)
-    return f"TG-{now:%Y%m%d}-{secrets.token_hex(3).upper()}"
+    return f"VX-{now:%Y%m%d}-{secrets.token_hex(3).upper()}"
 
 
 class TrustGuardEngine:

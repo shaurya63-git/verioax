@@ -1,7 +1,7 @@
 """Threat-intelligence and verification providers.
 
 Every provider reports *how* it knows something (``mode``): ``live`` (API call made now), ``cache`` (an earlier live
-answer still within its TTL, or a downloaded feed), ``local`` (TrustGuard's own IOC list). A provider without a key says
+answer still within its TTL, or a downloaded feed), ``local`` (Verioax's own IOC list). A provider without a key says
 ``not_configured``; a failed call says ``error`` - it never pretends a URL is clean.
 
 Privacy: lookups send the URL to the provider. ``trustguard.url.analyzer`` strips query parameters that carry personal
@@ -21,7 +21,7 @@ from ..cache import TTLCache
 from ..schemas import FactCheckRef, IntelResult
 from ..url.parse import refang
 
-USER_AGENT = "TrustGuard-AI/0.1 (+https://github.com/)"
+USER_AGENT = "Verioax/0.1 (+https://github.com/)"
 
 
 def _now() -> datetime:
@@ -99,7 +99,7 @@ class SafeBrowsing(_Base):
         return bool(self.api_key)
 
     def _lookup(self, url: str) -> IntelResult:
-        body = {"client": {"clientId": "trustguard-ai", "clientVersion": "0.1.0"},
+        body = {"client": {"clientId": "verioax", "clientVersion": "0.1.0"},
                 "threatInfo": {"threatTypes": self.THREATS, "platformTypes": ["ANY_PLATFORM"], "threatEntryTypes": ["URL"],
                                "threatEntries": [{"url": url}]}}
         with self._client() as c:
@@ -188,7 +188,7 @@ class PhishTank(_Base):
         return bool(self.app_key)
 
     def _lookup(self, url: str) -> IntelResult:
-        ua = f"phishtank/{self.username}" if self.username else "phishtank/trustguard-ai"
+        ua = f"phishtank/{self.username}" if self.username else "phishtank/verioax"
         with httpx.Client(timeout=self.timeout_s, transport=self.transport, headers={"User-Agent": ua}) as c:
             r = c.post("https://checkurl.phishtank.com/checkurl/", data={"url": url, "format": "json", "app_key": self.app_key})
             r.raise_for_status()
@@ -251,8 +251,8 @@ class OpenPhish(_Base):
 
 # ----------------------------------------------------------------------------------------------- local IOC list (shipped seed + user additions)
 class LocalIOC:
-    name, label, signup_url = "local_ioc", "TrustGuard IOC list", ""
-    attribution = "TrustGuard local indicator list"
+    name, label, signup_url = "local_ioc", "Verioax IOC list", ""
+    attribution = "Verioax local indicator list"
 
     def __init__(self, files: list[Path]):
         self.files = files

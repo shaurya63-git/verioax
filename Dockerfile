@@ -1,7 +1,7 @@
-# TrustGuard AI - one image for both the web app (default) and the REST API.
-#   docker build -t trustguard-ai .
-#   docker run --rm -p 127.0.0.1:8501:8501 trustguard-ai                       # web app
-#   docker run --rm -p 127.0.0.1:8000:8000 trustguard-ai \
+# Verioax - one image for both the web app (default) and the REST API.
+#   docker build -t verioax .
+#   docker run --rm -p 127.0.0.1:8501:8501 verioax                       # web app
+#   docker run --rm -p 127.0.0.1:8000:8000 verioax \
 #       uvicorn api.main:app --host 0.0.0.0 --port 8000                         # API
 FROM python:3.12-slim
 

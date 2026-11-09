@@ -1,8 +1,8 @@
-# Seed indicators for TrustGuard's local IOC provider.
+# Seed indicators for Verioax's local IOC provider.
 # source: Cyble CRIL "RTO Scam Wave Continues" (Dec 2025) - fake e-Challan / courier / bank phishing infrastructure
 # Reference: https://cyble.com/blog/rto-scam-wave-continues/
 #
-# Indicators are stored defanged ([.]) so this file can't be clicked or auto-linked; TrustGuard refangs them on load.
+# Indicators are stored defanged ([.]) so this file can't be clicked or auto-linked; Verioax refangs them on load.
 # Phishing domains are short-lived: treat this list as a historical seed and add fresh indicators on the
 # Threat Intelligence page (they are saved to data/runtime/iocs_user.txt, which is not committed).
 

@@ -1,10 +1,10 @@
-# TrustGuard AI
+# Verioax
 
 **Intelligent message, link & privacy protection.** Paste a suspicious SMS, WhatsApp message, email, link or document.
-TrustGuard removes your personal data first, then checks the content for scam and hoax signals, inspects every link, and
+Verioax removes your personal data first, then checks the content for scam and hoax signals, inspects every link, and
 explains its verdict in plain language: what it found, where, how sure it is, and what to do next.
 
-![A fake e-challan message analysed by TrustGuard: critical risk, highlighted evidence, recommended actions](docs/screenshots/message-scan.png)
+![A fake e-challan message analysed by Verioax: critical risk, highlighted evidence, recommended actions](docs/screenshots/message-scan.png)
 
 ## The problem
 
@@ -21,7 +21,7 @@ People who receive these messages have two bad options:
 - They can paste the whole message into a chatbot or a link checker. That also hands over their name, vehicle number and
   phone number.
 
-TrustGuard does the privacy step first, gives a verdict it can explain, and never opens the link in the user's browser.
+Verioax does the privacy step first, gives a verdict it can explain, and never opens the link in the user's browser.
 
 ## What it does
 
@@ -231,7 +231,7 @@ The full model, every combination rule and a worked example are in [docs/scoring
 - **A link is cleaned before any lookup.** Query parameters that carry personal data are removed. A link with personal
   data in its path is not visited at all.
 - **API keys** are held as secrets. They are never logged, returned by the API or shown in the UI.
-- **Note:** live checks connect from the machine running TrustGuard, so a scam site can see that machine's IP address.
+- **Note:** live checks connect from the machine running Verioax, so a scam site can see that machine's IP address.
   Use *local processing mode* in Settings, or run the backend on a separate server or VPN, if that matters to you.
 
 ## Project structure
@@ -316,14 +316,14 @@ be lower, especially for new scam scripts.
 
 - The UI layout and the PII workflow are inspired by a reference PII-redaction project (a Streamlit document-redaction
   pipeline). That workflow is typed placeholders, a separate value map, a leak sweep, clean / needs-review / blocked
-  status and an evidence tab. TrustGuard is an independent implementation. See
+  status and an evidence tab. Verioax is an independent implementation. See
   [docs/reference-review.md](docs/reference-review.md).
 - The seed indicators come from Cyble CRIL's December 2025 e-challan report.
 - Fonts: IBM Plex Sans and IBM Plex Mono, under the SIL Open Font License.
 
 ## Disclaimer
 
-TrustGuard AI is an educational security project. Its verdicts are guidance, not proof, and not legal or financial advice.
+Verioax is an educational security project. Its verdicts are guidance, not proof, and not legal or financial advice.
 If you have lost money to a scam, call **1930** or report at **cybercrime.gov.in** immediately.
 
 ## License

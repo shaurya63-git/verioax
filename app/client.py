@@ -138,7 +138,7 @@ class APIClient:
         try:
             r = self.http.request(method, path, **kw)
         except httpx.HTTPError as exc:
-            raise ClientError(f"The TrustGuard API at {self.base} is not reachable ({type(exc).__name__}).") from None
+            raise ClientError(f"The Verioax API at {self.base} is not reachable ({type(exc).__name__}).") from None
         if r.status_code >= 400:
             try:
                 detail = r.json().get("detail")

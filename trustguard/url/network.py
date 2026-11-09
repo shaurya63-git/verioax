@@ -1,6 +1,6 @@
 """Live link inspection, built to be safe to point at hostile URLs.
 
-The fetcher is the part of TrustGuard that an attacker controls the input of, so it is hardened like an SSRF target:
+The fetcher is the part of Verioax that an attacker controls the input of, so it is hardened like an SSRF target:
 
 * only ``http``/``https`` on allowed ports (80/443 by default);
 * every hostname is resolved by us and *every* returned address must be public (``ipaddress.is_global``) - private,
@@ -32,7 +32,7 @@ Resolver = Callable[..., list]
 
 
 class BlockedDestination(Exception):
-    """The URL (or a redirect hop) points somewhere TrustGuard refuses to connect to."""
+    """The URL (or a redirect hop) points somewhere Verioax refuses to connect to."""
 
 
 def _ssl_context() -> ssl.SSLContext:
@@ -152,7 +152,7 @@ _EXE_TYPES = ("application/x-msdownload", "application/x-msdos-program", "applic
 
 class SafeFetcher:
     def __init__(self, *, timeout_s: float = 8.0, max_redirects: int = 5, max_bytes: int = 1_500_000,
-                 allowed_ports: tuple[int, ...] = (80, 443), user_agent: str = "TrustGuard/0.1",
+                 allowed_ports: tuple[int, ...] = (80, 443), user_agent: str = "Verioax/0.1",
                  transport: httpx.BaseTransport | None = None, resolver: Resolver = socket.getaddrinfo, total_budget_s: float = 20.0):
         self.timeout_s, self.max_redirects, self.max_bytes = timeout_s, max_redirects, max_bytes
         self.allowed_ports, self.user_agent, self.total_budget_s = allowed_ports, user_agent, total_budget_s

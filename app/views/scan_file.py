@@ -14,7 +14,7 @@ SAMPLES = {"KYC phishing email (PDF)": "kyc_phishing_email.pdf", "Forwarded mess
            "SMS screenshot (image, OCR)": "challan_sms_screenshot.png"}
 SAMPLES = {label: name for label, name in SAMPLES.items() if (SAMPLE_DIR / name).is_file()}
 
-ui.page_header("File scanner", "Upload a document or a screenshot. TrustGuard extracts the text, finds and removes personal data, "
+ui.page_header("File scanner", "Upload a document or a screenshot. Verioax extracts the text, finds and removes personal data, "
                                "and checks the content and its links for scams.")
 
 with st.container(border=True):

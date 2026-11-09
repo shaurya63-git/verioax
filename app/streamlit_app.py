@@ -1,4 +1,4 @@
-"""TrustGuard AI - Streamlit front end.
+"""Verioax - Streamlit front end.
 
 Run from the repository root:   streamlit run app/streamlit_app.py
 
@@ -18,7 +18,7 @@ for p in (str(ROOT), str(APP)):
 
 import streamlit as st  # noqa: E402
 
-st.set_page_config(page_title="TrustGuard AI", page_icon=str(APP / "static" / "logo_icon.svg"), layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Verioax", page_icon=str(APP / "static" / "logo_icon.svg"), layout="wide", initial_sidebar_state="expanded")
 
 import ui  # noqa: E402
 from client import ClientError  # noqa: E402

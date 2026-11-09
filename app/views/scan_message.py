@@ -10,7 +10,7 @@ from trustguard.schemas import AnalysisMode
 MODES = {AnalysisMode.FULL: "Full security analysis", AnalysisMode.SCAM: "Scam & hoax only", AnalysisMode.PII: "Personal data only"}
 
 ui.page_header("Message scanner", "Paste an SMS, WhatsApp message, email or social media message you received. "
-                                  "TrustGuard checks it for scam and hoax signals, checks every link it contains, and removes personal data.")
+                                  "Verioax checks it for scam and hoax signals, checks every link it contains, and removes personal data.")
 
 
 def use_sample() -> None:

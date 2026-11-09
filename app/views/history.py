@@ -38,7 +38,7 @@ df = pd.DataFrame([{"Scan ID": r["scan_id"], "Date / time": pd.to_datetime(r["cr
 event = st.dataframe(df, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key="h_table", height=320,
                      column_config={"Score": st.column_config.NumberColumn(format="%d")})
 d1, d2, _ = st.columns([1, 1, 3])
-d1.download_button("Export list (CSV)", reports.history_csv(rows).encode(), file_name="trustguard-history.csv", mime="text/csv",
+d1.download_button("Export list (CSV)", reports.history_csv(rows).encode(), file_name="verioax-history.csv", mime="text/csv",
                    on_click="ignore", icon=":material/download:", width="stretch")
 
 selected = None

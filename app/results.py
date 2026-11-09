@@ -126,7 +126,7 @@ def _findings(r: ScanResult, original: str | None, key: str) -> None:
                 elif c.verification_status == "no_fact_checks_found":
                     st.caption("No published fact-check matched this claim. That does not make it true or false.")
                 else:
-                    st.caption("Not independently verified - TrustGuard does not judge whether a claim is true from its wording alone.")
+                    st.caption("Not independently verified - Verioax does not judge whether a claim is true from its wording alone.")
 
 
 # ---------------------------------------------------------------------------------------------- links
@@ -163,7 +163,7 @@ def _links(r: ScanResult) -> None:
             if u.page and u.page.fetched and (u.page.title or u.page.sensitive_fields):
                 st.caption(f"Page title: {u.page.title or '-'}; sensitive fields on the page: {', '.join(u.page.sensitive_fields) or 'none'}")
             st.caption(u.visit_note or "")
-    st.caption("Links are shown defanged (hxxps, [.]) so they cannot be opened by accident. TrustGuard never opens them in your browser; "
+    st.caption("Links are shown defanged (hxxps, [.]) so they cannot be opened by accident. Verioax never opens them in your browser; "
                "live checks run in the backend's guarded fetcher.")
 
 
@@ -253,7 +253,7 @@ def _report(r: ScanResult, key: str, client) -> None:
     files = [("PDF", "pdf", "application/pdf", lambda: reports.to_pdf(r)), ("Markdown", "md", "text/markdown", lambda: reports.to_markdown(r).encode()),
              ("JSON", "json", "application/json", lambda: reports.to_json(r).encode()), ("CSV findings", "csv", "text/csv", lambda: reports.findings_csv(r).encode())]
     for col, (label, ext, mime, fn) in zip(cols, files, strict=True):
-        col.download_button(label, fn(), file_name=f"trustguard-{r.scan_id}.{ext}", mime=mime, key=f"{key}_dl_{ext}", on_click="ignore",
+        col.download_button(label, fn(), file_name=f"verioax-{r.scan_id}.{ext}", mime=mime, key=f"{key}_dl_{ext}", on_click="ignore",
                             icon=":material/download:", width="stretch")
     st.markdown("**Technical details**")
     p = r.processing

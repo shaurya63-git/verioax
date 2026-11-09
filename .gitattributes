@@ -1,0 +1,7 @@
+# Binary files: never convert line endings or show text diffs (Windows' autocrlf would corrupt a PDF's byte offsets).
+*.pdf    binary
+*.png    binary
+*.jpg    binary
+*.docx   binary
+*.woff2  binary
+*.sqlite binary

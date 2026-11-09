@@ -14,7 +14,7 @@ from typing import Any
 from ..pii import TYPE_LABELS
 from ..schemas import CATEGORY_LABELS, ScanResult, Severity
 
-DISCLAIMER = ("TrustGuard AI gives an automated assessment based on the evidence listed. A low score is not a guarantee of safety; "
+DISCLAIMER = ("Verioax gives an automated assessment based on the evidence listed. A low score is not a guarantee of safety; "
               "verify important messages through official channels.")
 
 
@@ -41,7 +41,7 @@ def findings_csv(r: ScanResult) -> str:
 
 
 def to_markdown(r: ScanResult) -> str:
-    L: list[str] = [f"# TrustGuard AI report - {r.scan_id}", "",
+    L: list[str] = [f"# Verioax report - {r.scan_id}", "",
                     f"**{r.overall_risk.value} RISK** ({'privacy exposure' if r.risk_basis == 'privacy' else 'threat'} score {r.risk_score}/100, "
                     f"confidence {r.confidence_label.lower()} {r.model_confidence:.2f})", "",
                     f"**{r.verdict_title}** - {r.verdict_summary}", "",
@@ -128,9 +128,9 @@ def to_pdf(r: ScanResult) -> bytes:
     P = lambda t, **k: Paragraph(_safe(t, uni), S(**k))  # noqa: E731
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm, bottomMargin=14 * mm,
-                            title=f"TrustGuard AI report {r.scan_id}", author="TrustGuard AI")
+                            title=f"Verioax report {r.scan_id}", author="Verioax")
     col = _LEVEL_COLORS.get(r.overall_risk.value, "#6b7685")
-    story: list[Any] = [P("TrustGuard AI - security report", size=15, b=True),
+    story: list[Any] = [P("Verioax - security report", size=15, b=True),
                         P(f"{r.scan_id} · {r.created_at:%Y-%m-%d %H:%M} UTC · {r.input_type.value} · modules: {', '.join(r.processing.modules)}"
                           + (" · DEMO DATA" if r.processing.demo else ""), size=8, color="#5b6576"), Spacer(1, 6)]
     banner = Table([[P(f"{r.overall_risk.value} RISK", size=13, b=True, color="#ffffff"),
@@ -192,7 +192,7 @@ def history_csv(rows: list[dict]) -> str:
 
 def analytics_markdown(summary: dict) -> str:
     t = summary["totals"]
-    L = ["# TrustGuard AI - analytics report", "", f"Generated {summary['generated_at']} over {t['scans']} scan(s)"
+    L = ["# Verioax - analytics report", "", f"Generated {summary['generated_at']} over {t['scans']} scan(s)"
          + (f" ({t['demo_scans']} demo)" if t["demo_scans"] else "") + ".", "",
          "| Metric | Value |", "|---|---|"] + [f"| {k.replace('_', ' ')} | {v} |" for k, v in t.items()] + [""]
     for title, key in (("Risk distribution", "risk_distribution"), ("Detection categories", "categories"), ("PII types", "pii_types"),
@@ -225,9 +225,9 @@ def analytics_pdf(summary: dict) -> bytes:
     st = lambda size=9, b=False: ParagraphStyle("s", fontName=bold if b else reg, fontSize=size, leading=size * 1.35)  # noqa: E731
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm, bottomMargin=14 * mm,
-                            title="TrustGuard AI analytics report")
+                            title="Verioax analytics report")
     t = summary["totals"]
-    story: list[Any] = [Paragraph("TrustGuard AI - analytics report", st(15, True)),
+    story: list[Any] = [Paragraph("Verioax - analytics report", st(15, True)),
                         Paragraph(_safe(f"Generated {summary['generated_at']} · {t['scans']} scan(s)", uni), st(8)), Spacer(1, 8)]
 
     def block(title: str, data: dict):

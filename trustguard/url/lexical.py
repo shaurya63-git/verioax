@@ -164,7 +164,7 @@ def check(p: ParsedURL, *, claimed_entities: list[str] | None = None) -> Lexical
     registry = B.restricted_suffix(p.host) if not p.is_ip else None
     if official:
         checks.append(URLCheck(key="identity", label="Domain ownership", status="pass", summary=f"Official domain of {official.name}",
-                               explanation=f"'{p.registrable}' is on TrustGuard's list of verified domains for {official.name}.",
+                               explanation=f"'{p.registrable}' is on Verioax's list of verified domains for {official.name}.",
                                details={"entity": official.key}))
     elif registry:
         checks.append(URLCheck(key="identity", label="Domain ownership", status="pass", summary=B.RESTRICTED_SUFFIXES[registry],
@@ -306,7 +306,7 @@ def check(p: ParsedURL, *, claimed_entities: list[str] | None = None) -> Lexical
     chat = CHAT_LINKS.get(host_core)
     if shortener:
         checks.append(URLCheck(key="shortener", label="Link shortener", status="warn", summary=f"Shortened link ({host_core})",
-                               explanation="Short links hide the real destination. TrustGuard resolves it in the backend when live checks are on."))
+                               explanation="Short links hide the real destination. Verioax resolves it in the backend when live checks are on."))
         signals.append(URLSignal("shortener", C.SUSPICIOUS_LINK, "Shortened link hides the destination", SV.MEDIUM, ST.WEAK, 0.75,
                                  "The real address is hidden behind a link shortener."))
     else:

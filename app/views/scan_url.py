@@ -6,7 +6,7 @@ from client import ClientError
 from state import client
 from trustguard.demo import SAMPLE_URLS
 
-ui.page_header("URL scanner", "Check a link before you open it. TrustGuard never opens it in your browser: it inspects the address, "
+ui.page_header("URL scanner", "Check a link before you open it. Verioax never opens it in your browser: it inspects the address, "
                               "and - when live checks are on - visits it from the backend's guarded fetcher and asks threat-intelligence services about it.")
 
 
