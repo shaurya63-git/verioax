@@ -36,6 +36,13 @@ GOV_MARKERS = re.compile(r"(?i)government\s+of\s+india|ministry\s+of\s+road\s+tr
 AI_DIRECTED = re.compile(r"(?i)ignore\s+(?:all\s+|any\s+)?(?:previous|prior|above)\s+instructions|you\s+are\s+(?:an?\s+)?(?:ai|assistant|language\s+model)|"
                          r"\b(?:llm|large\s+language\s+model|ai\s+(?:assistant|scanner|model))\b|classify\s+(?:this|the)\s+(?:page|site|email|message)\s+as|"
                          r"this\s+(?:page|site|website|email)\s+is\s+(?:safe|legitimate|benign|not\s+phishing)")
+# Indicators worth running on a web page's visible text. Wording-only signals such as urgency are left out: honest pages
+# use them all the time.
+PAGE_TEXT_KEYS = {"giveaway_lure", "prize_claim", "free_offer_lure", "celebrity_giveaway", "free_scheme_claim", "share_to_unlock",
+                  "forward_demand", "viral_fear_hoax", "known_hoax_claim", "health_misinformation", "investment_lure", "job_lure",
+                  "fee_request", "digital_arrest", "credential_entry", "loan_lure"}
+SHARE_LINK = re.compile(r"(?i)^(?:whatsapp://send|https?://(?:api\.whatsapp\.com/send|web\.whatsapp\.com/send|wa\.me/\?)|"
+                        r"https?://(?:www\.)?facebook\.com/sharer|https?://t\.me/share/url|tg://msg)")
 _HIDDEN_STYLE = re.compile(r"(?i)display\s*:\s*none|visibility\s*:\s*hidden|font-size\s*:\s*0(?:px|pt|em)?\b|opacity\s*:\s*0(?:\.0+)?\b|"
                            r"(?:left|top)\s*:\s*-\d{3,}px|height\s*:\s*0(?:px)?\s*;?\s*overflow\s*:\s*hidden")
 
@@ -99,6 +106,19 @@ def inspect_html(body: bytes, page_url: str, content_type: str = "text/html") ->
         if inp.find_parent("form") is None and inp.get("type", "").lower() not in ("hidden", "submit", "button"):
             sensitive |= {k for k, rx in SENSITIVE_FIELDS if rx.search(_field_text(inp))}
     page.sensitive_fields = sorted(sensitive)
+
+    # ---- what the page says: prizes, share-to-unlock gates, fake schemes, hoaxes (wording rules shared with the message engine)
+    from ..scam import indicators as I  # imported here: trustguard.scam imports the URL package
+
+    text = re.sub(r"\s+", " ", f"{page.title or ''} {visible}")[:30000]
+    page.debunk_context = bool(I.DEBUNK.search(text))
+    for m in I.find(text):
+        key = m.indicator.key
+        if key in PAGE_TEXT_KEYS and key not in page.lure_excerpts:
+            page.lure_excerpts[key] = text[max(0, m.start - 40):m.end + 40].strip()[:140]
+    page.lure_signals = sorted(page.lure_excerpts)
+    page.share_links = sum(1 for a in soup.find_all("a", href=True)
+                           if SHARE_LINK.search(a["href"].strip()) and "phone=" not in a["href"].lower())
 
     # ---- downloads and redirects
     for a in soup.find_all("a", href=True):

@@ -1,12 +1,14 @@
 import streamlit as st
 
+import auth
 import ui
 from state import client
 from trustguard import __version__
 from trustguard.config import get_settings
 
+auth.require("moderator")
 ui.page_header("Settings", "Detection thresholds, what may be sent online, and how long scan history is kept.")
-c = client()
+c = client().everyone          # settings and stored-data actions apply to the whole installation
 p = c.get_prefs()
 
 tab_det, tab_net, tab_data, tab_keys = st.tabs(["Detection", "Network & privacy", "Data & history", "API keys"], key="set_tabs")

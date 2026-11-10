@@ -199,3 +199,79 @@ def test_unreachable_host_is_not_evidence(settings):
     statuses = {c.key: c.status for c in res.report.checks}
     assert statuses["certificate"] == statuses["redirects"] == statuses["page"] == statuses["domain_age"] == "unavailable"
     assert not [s for s, _ in res.signals if s.key in ("bad_certificate", "new_domain")]
+
+
+# ----------------------------------------------------------------------------------------------- what visited pages say
+VIRAL_GIFT = b"""<html><head><title>Amul 75th Anniversary Celebration</title></head><body>
+<h1>Congratulations! Amul is giving away free gift boxes</h1>
+<p>Answer 4 simple questions and win a gift box worth Rs 5000. Only the first 1000 users!</p>
+<p>Share this with 5 groups or 20 friends on WhatsApp to claim your gift.</p>
+<a href="whatsapp://send?text=Amul%20gift%20https://amul-gift.example">Share on WhatsApp</a>
+<div class="comments">Priya: I got mine! &middot; Like &middot; Reply</div></body></html>"""
+NEWS_WARNING = b"""<html><head><title>Fact check: fake Amul anniversary gift message</title></head><body>
+<h1>Beware of the fake Amul '75th anniversary gift' message</h1>
+<p>A viral message claims Amul is giving away free gift boxes if you answer 4 questions and share with 5 groups to claim it.
+This claim is fake. Amul has not announced any such offer.</p>
+<a href="https://api.whatsapp.com/send?text=Fact%20check">Share on WhatsApp</a></body></html>"""
+FAKE_SCHEME = b"""<html><head><title>PM Free Laptop Yojana 2026 - Online Registration</title></head><body>
+<h1>Pradhan Mantri Free Laptop Yojana</h1><p>Government is giving free laptops to all students. Register now.</p>
+<form action="/submit" method="post"><label>Aadhaar Number</label><input name="aadhaar">
+<label>Bank account / Net banking user ID</label><input name="netbanking_user"><label>Mobile</label><input name="mobile"></form></body></html>"""
+HOAX_PAGE = b"""<html><head><title>Shocking truth about new notes</title></head><body>
+<p>The new 2000 rupee note has a nano GPS chip that lets the government track every note, even 120 metres underground.</p></body></html>"""
+
+
+def _visit(settings, html: bytes, url: str):
+    from trustguard.engine import TrustGuardEngine
+    prefs = Preferences(network_checks=True, intel_lookups=False, factcheck_lookups=False)
+    fetcher = SafeFetcher(transport=httpx.MockTransport(lambda r: httpx.Response(200, headers={"content-type": "text/html"}, content=html)))
+    ua = URLAnalyzer(settings, prefs, IntelHub(settings, prefs), fetcher=fetcher,
+                     tls_probe=lambda h: TLSInfo(ok=True, issuer="Example CA", age_days=200),
+                     rdap=lambda d: DomainInfo(age_days=900, registered=None),
+                     resolver=lambda *a, **k: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", 443))])
+    return TrustGuardEngine(settings, prefs, store=False, url_analyzer=ua).scan_url(url).result
+
+
+def test_share_to_unlock_giveaway_page_is_flagged(settings):
+    r = _visit(settings, VIRAL_GIFT, "https://celebration-portal.com/gift")
+    keys = {f.indicator: f for f in r.scam_findings}
+    assert keys["page_share_to_unlock"].strength.value == "confirmed"
+    assert r.overall_risk.value in ("HIGH", "CRITICAL")
+    page = next(c for c in r.urls[0].checks if c.key == "page")
+    assert page.status == "fail" and "share" in page.summary.lower()
+
+
+def test_news_article_about_the_same_scam_is_not_flagged(settings):
+    r = _visit(settings, NEWS_WARNING, "https://news-portal-example.com/fact-check/amul")
+    assert r.overall_risk.value == "LOW"
+    assert not [f for f in r.scam_findings if f.source == "page"]
+    assert r.urls[0].page.debunk_context
+
+
+def test_fake_scheme_registration_form(settings):
+    r = _visit(settings, FAKE_SCHEME, "https://students-laptop-portal.com/register")
+    keys = {f.indicator for f in r.scam_findings}
+    assert "page_scheme_form" in keys and r.overall_risk.value in ("HIGH", "CRITICAL")
+
+
+def test_hoax_page_is_at_least_medium(settings):
+    r = _visit(settings, HOAX_PAGE, "https://viral-truth-example.com/notes")
+    assert "page_hoax" in {f.indicator for f in r.scam_findings}
+    assert r.overall_risk.value in ("MEDIUM", "HIGH", "CRITICAL")
+
+
+@pytest.mark.parametrize("url", ["https://pm-laptop-yojana.in", "http://free-recharge-yojana.xyz", "https://ayushman-card-apply.online",
+                                 "https://pmkisan-registration.co.in", "https://amul-anniversary-gift.blogspot.com", "http://jio-free-offer.online",
+                                 "https://dmart-20th-anniversary.com/gift", "https://meesho-lucky-draw.online/winner", "https://lucky-winner-prize.xyz"])
+def test_fake_scheme_and_giveaway_domains_are_high_without_visiting(engine, url):
+    assert engine.scan_url(url).result.overall_risk.value in ("HIGH", "CRITICAL")
+
+
+@pytest.mark.parametrize("url", ["https://datatables.net", "https://www.amulet-crafts.com", "https://freecodecamp.org", "https://www.giftcards.com"])
+def test_ordinary_words_are_not_brand_lookalikes(url):
+    assert not [s for s in check(parse(url)).signals if s.strength.value != "weak"]
+
+
+def test_dmart_is_not_mistaken_for_blue_dart():
+    titles = [s.title for s in check(parse("https://dmart-20th-anniversary.com/gift")).signals]
+    assert any("DMart" in t for t in titles) and not any("Blue Dart" in t for t in titles)

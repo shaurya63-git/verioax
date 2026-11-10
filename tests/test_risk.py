@@ -45,9 +45,16 @@ def test_inconclusive_only_when_nothing_else_decides():
 
 
 def test_sensitivity_thresholds():
-    fs = [f(SV.MEDIUM, ST.STRONG, conf=0.9), f(SV.LOW, ST.WEAK, cat=C.PHISHING)]
+    fs = [f(SV.HIGH, ST.WEAK, conf=0.9), f(SV.LOW, ST.WEAK, cat=C.PHISHING)]
     assert risk.assess(fs, sensitivity="aggressive").level == RiskLevel.MEDIUM
     assert risk.assess(fs, sensitivity="conservative").level == RiskLevel.LOW
+
+
+def test_a_strong_indicator_is_never_low():
+    """One strong medium finding scores ~22 on its own; the guard rail keeps it from being reported as LOW."""
+    a = risk.assess([f(SV.MEDIUM, ST.STRONG, conf=0.8)], sensitivity="conservative")
+    assert a.level == RiskLevel.MEDIUM and any("strong indicator" in r for r in a.rules)
+    assert risk.assess([f(SV.MEDIUM, ST.WEAK, conf=0.8)]).level == RiskLevel.LOW
 
 
 def test_confidence_is_separate_from_score():

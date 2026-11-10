@@ -1,6 +1,7 @@
 import pandas as pd
 import streamlit as st
 
+import auth
 import charts
 import ui
 from client import ClientError
@@ -9,7 +10,9 @@ from trustguard import analytics
 from trustguard.demo import SAMPLES
 from trustguard.schemas import AnalysisMode
 
-ui.page_header("Dashboard", "An overview of everything you have checked: how risky it was, what kind of scams turned up and how much personal data was removed.")
+auth.require()
+ui.page_header("Dashboard", "An overview of everything you have checked: how risky it was, what kind of scams turned up and how much "
+                             "personal data was removed. Only you can see your scans.")
 c = client()
 
 

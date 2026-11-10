@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     data_dir: Path = Field(default=Path("data/runtime"), validation_alias=AliasChoices("TRUSTGUARD_DATA_DIR", "data_dir"))
     api_url: str | None = Field(default=None, validation_alias=AliasChoices("TRUSTGUARD_API_URL", "api_url"))
     api_token: SecretStr | None = _key("TRUSTGUARD_API_TOKEN", "api_token")
+    # 6-digit PIN that moderators enter at sign-up and sign-in. Kept out of the code on purpose: the repository is public.
+    moderator_pin: SecretStr | None = _key("VERIOAX_MODERATOR_PIN", "moderator_pin")
 
     # live URL inspection limits (SSRF-guarded fetcher)
     fetch_timeout_s: float = Field(default=8.0, validation_alias=AliasChoices("TRUSTGUARD_FETCH_TIMEOUT_S", "fetch_timeout_s"))

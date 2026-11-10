@@ -18,6 +18,8 @@ import tempfile  # noqa: E402
 os.environ["TRUSTGUARD_DATA_DIR"] = tempfile.mkdtemp(prefix="trustguard-tests-")
 for _k in ("TRUSTGUARD_API_URL", "TRUSTGUARD_API_TOKEN"):
     os.environ.pop(_k, None)
+TEST_PIN = "424242"                     # the real moderator PIN is configured in .env, never in code or tests
+os.environ["VERIOAX_MODERATOR_PIN"] = TEST_PIN
 
 from trustguard.config import Preferences, Settings, get_settings, save_preferences  # noqa: E402
 

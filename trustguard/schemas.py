@@ -269,6 +269,10 @@ class PageInspection(BaseModel):
     apk_download: bool = False
     meta_refresh: str | None = None
     notes: list[str] = Field(default_factory=list)
+    lure_signals: list[str] = Field(default_factory=list)          # scam/hoax indicator keys found in the visible page text
+    lure_excerpts: dict[str, str] = Field(default_factory=dict)    # indicator key -> short excerpt of the page text (<= 140 chars)
+    share_links: int = 0                                           # "share on WhatsApp / Facebook / Telegram" links
+    debunk_context: bool = False                                   # the page reads like a fact-check or scam warning
 
 
 class URLReport(BaseModel):

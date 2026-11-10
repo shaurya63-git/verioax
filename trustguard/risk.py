@@ -12,6 +12,7 @@ Scoring:
 5. Level thresholds depend on the sensitivity preference (balanced: 25 / 50 / 75).
 6. Rules on top of the score:
    * floor: a CONFIRMED critical finding -> CRITICAL; a CONFIRMED high or STRONG critical finding -> at least HIGH;
+     any other STRONG or CONFIRMED finding of MEDIUM severity or worse -> at least MEDIUM;
    * ceiling: with only WEAK findings the level can be at most MEDIUM;
    * INCONCLUSIVE: the message hinges on a link that could not be verified and nothing else raised the level.
    When a rule moves the level, the score is moved to the edge of that level, so score and level never disagree.
@@ -83,6 +84,8 @@ def assess(findings: list[RawFinding], *, sensitivity: str = "balanced", mitigat
     confirmed_crit = any(f.strength == Strength.CONFIRMED and f.severity == Severity.CRITICAL for f in findings)
     confirmed_high = any(f.strength == Strength.CONFIRMED and f.severity == Severity.HIGH for f in findings)
     strong_crit = any(f.strength == Strength.STRONG and f.severity == Severity.CRITICAL for f in findings)
+    strong_any = any(f.strength in (Strength.STRONG, Strength.CONFIRMED) and f.severity in (Severity.MEDIUM, Severity.HIGH, Severity.CRITICAL)
+                     for f in findings)
     only_weak = findings and all(f.strength == Strength.WEAK for f in findings)
 
     def raise_to(target: RiskLevel, why: str) -> None:
@@ -95,6 +98,9 @@ def assess(findings: list[RawFinding], *, sensitivity: str = "balanced", mitigat
         raise_to(RiskLevel.CRITICAL, "floor: confirmed critical indicator -> CRITICAL")
     elif confirmed_high or strong_crit:
         raise_to(RiskLevel.HIGH, "floor: confirmed high / strong critical indicator -> at least HIGH")
+    elif strong_any:
+        # a STRONG indicator means honest senders practically never do this; it can't be outweighed into LOW by a short message
+        raise_to(RiskLevel.MEDIUM, "floor: strong indicator -> at least MEDIUM")
     if only_weak and ORDER.index(level) > ORDER.index(RiskLevel.MEDIUM):
         level, score = RiskLevel.MEDIUM, min(score, thr[1] - 1)
         rules.append("ceiling: only weak indicators -> at most MEDIUM")

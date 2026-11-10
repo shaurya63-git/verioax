@@ -126,14 +126,14 @@ class TrustGuardEngine:
 
     # ------------------------------------------------------------------ public entry points
     def scan_message(self, text: str, *, sender: str | None = None, mode: AnalysisMode = AnalysisMode.FULL,
-                     source_name: str = "Pasted message", demo: bool = False) -> ScanOutcome:
+                     source_name: str = "Pasted message", demo: bool = False, owner_id: int | None = None) -> ScanOutcome:
         if text is None or not text.strip():
             raise InputError("There is no text to analyse. Paste a message first.")
         if len(text) > MAX_MESSAGE_CHARS:
             raise InputError(f"The message is too long ({len(text):,} characters). The limit is {MAX_MESSAGE_CHARS:,}; use the File Scanner for documents.")
-        return self._run(text, InputType.MESSAGE, mode, source_name, sender=sender, demo=demo)
+        return self._run(text, InputType.MESSAGE, mode, source_name, sender=sender, demo=demo, owner_id=owner_id)
 
-    def scan_url(self, url: str, *, demo: bool = False) -> ScanOutcome:
+    def scan_url(self, url: str, *, demo: bool = False, owner_id: int | None = None) -> ScanOutcome:
         url = (url or "").strip()
         if not url:
             raise InputError("Enter a link to check.")
@@ -143,21 +143,23 @@ class TrustGuardEngine:
             parse(url)
         except URLParseError as exc:
             raise InputError(f"That doesn't look like a valid web link: {exc}.") from None
-        return self._run(url, InputType.URL, AnalysisMode.FULL, "Submitted link", single_url=url, demo=demo)
+        return self._run(url, InputType.URL, AnalysisMode.FULL, "Submitted link", single_url=url, demo=demo, owner_id=owner_id)
 
-    def scan_file(self, filename: str, data: bytes, *, mode: AnalysisMode = AnalysisMode.FULL, demo: bool = False) -> ScanOutcome:
+    def scan_file(self, filename: str, data: bytes, *, mode: AnalysisMode = AnalysisMode.FULL, demo: bool = False,
+                  owner_id: int | None = None) -> ScanOutcome:
         try:
             doc = extract(filename, data)
         except ExtractionError as exc:
             raise InputError(f"Couldn't read '{filename}': {exc}.") from None
         if not doc.text.strip():
             raise InputError(f"No readable text was found in '{filename}'. " + " ".join(doc.warnings))
-        return self._run(doc.text, InputType.FILE, mode, filename, locate=doc.locate, extraction_warnings=doc.warnings, demo=demo)
+        return self._run(doc.text, InputType.FILE, mode, filename, locate=doc.locate, extraction_warnings=doc.warnings, demo=demo,
+                         owner_id=owner_id)
 
     # ------------------------------------------------------------------ pipeline
     def _run(self, text: str, input_type: InputType, mode: AnalysisMode, source_name: str, *, sender: str | None = None,
              single_url: str | None = None, locate: Callable[[int], str] | None = None, extraction_warnings: list[str] | None = None,
-             demo: bool = False) -> ScanOutcome:
+             demo: bool = False, owner_id: int | None = None) -> ScanOutcome:
         prefs = self.prefs
         t0 = time.perf_counter()
         timings: dict[str, int] = {}
@@ -330,7 +332,7 @@ class TrustGuardEngine:
         result.processing.timings_ms = timings
 
         if self.store is not None and prefs.store_history:
-            self.store.save(result, retention_days=prefs.retention_days)
+            self.store.save(result, retention_days=prefs.retention_days, owner_id=owner_id)
         restricted = RestrictedData(original_text=text, value_map=restricted_pii.value_map if restricted_pii else [],
                                     offset_map=omap, locate=locate)
         return ScanOutcome(result, restricted)

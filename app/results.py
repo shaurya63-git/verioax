@@ -248,6 +248,12 @@ def _compare(r: ScanResult, original: str | None, key: str) -> None:
 # ---------------------------------------------------------------------------------------------- report
 def _report(r: ScanResult, key: str, client) -> None:
     from trustguard import reports
+    if st.session_state.get("role") == "consumer":
+        a, b = st.columns([3, 1.2], vertical_alignment="center")
+        a.markdown("**Does this verdict look wrong?** Send it to the moderators with this scan attached; they see only the redacted result.")
+        if b.button("Report a wrong result", key=f"{key}_wrong", icon=":material/flag:", width="stretch"):
+            st.session_state.feedback_prefill = {"kind": "wrong_result", "scan_id": r.scan_id}
+            st.switch_page("views/feedback.py")
     st.markdown("**Download this report** - no raw personal data is included in any format.")
     cols = st.columns(4)
     files = [("PDF", "pdf", "application/pdf", lambda: reports.to_pdf(r)), ("Markdown", "md", "text/markdown", lambda: reports.to_markdown(r).encode()),

@@ -86,6 +86,7 @@ and the level always agree.
 |---|---|
 | Confirmed critical finding | Level is **CRITICAL** |
 | Confirmed high, or strong critical, finding | Level is at least **HIGH** |
+| Any other strong or confirmed finding of medium severity or worse | Level is at least **MEDIUM**. A strong signal means honest senders practically never do this, so a short message can't score it down to LOW. |
 | Only weak findings | Level is at most **MEDIUM**. Weak signals alone never make a HIGH verdict. |
 | The content hinges on a link that could not be verified, and nothing else raised the level | **INCONCLUSIVE** instead of LOW |
 
@@ -115,6 +116,32 @@ These rules look across engines and recognise a complete scam pattern rather tha
 | Disconnection + callback | An electricity disconnection threat with a mobile number to call | high · strong |
 | Card details + link | Asks you to type card or banking details on an unofficial link | high · strong |
 | Official identity + personal number | A bank or government message that asks you to call a mobile number | high · strong if combined with a threat, otherwise medium · weak |
+| Viral giveaway | A prize, gift, free recharge or free-scheme offer that you must forward or share to "unlock" | high · strong |
+| Free offer + unknown link | A prize or free offer whose link goes to a domain that belongs to no known brand or government body | high · strong |
+| Prize + personal contact | A prize claimed by calling a mobile number or messaging on WhatsApp or Telegram (the "KBC lottery" pattern) | high · strong |
+| Unsourced claim + forward request | A hoax-type claim (fear hoax, debunked claim, health or policy rumour, fake scheme) combined with a request to forward it | medium · strong |
+
+**Fact-checks and warnings are not hoaxes.** When a message reads as a debunk ("FAKE", "PIB Fact Check", "beware of
+messages claiming…"), the hoax indicators that it quotes don't count against it. Prize and free-offer wording is also
+ignored in that case, as long as the message carries no link and no number to call.
+
+## 5a. Page content
+
+When live checks are on, the text of the visited page is checked too, unless the page is on an official domain or reads
+as a fact-check.
+
+| Signal | Fires when | Result |
+|---|---|---|
+| Share to claim | The page offers a prize or gift and asks you to share it with friends or groups first | high · confirmed |
+| Fake scheme form | The page presents a government scheme and asks for Aadhaar, bank or card details | critical · strong |
+| Fee to release | The page asks for a processing, delivery or registration fee | high · strong |
+| Prizes or free offers | The page talks about prizes, gifts or free recharges | medium · weak |
+| Known hoax | The page repeats a widely debunked claim or a viral fear hoax | medium · strong for a known claim, otherwise weak |
+| Easy money | The page pitches high returns, easy online work or instant loans | medium · weak |
+
+The link's own name is checked as well. A government scheme name in a domain that isn't `.gov.in` or `.nic.in`
+(`pm-laptop-yojana.in`), or a domain made of giveaway words (`amul-anniversary-gift.blogspot.com`), is a strong signal
+when it comes with a brand name, a throwaway ending or an action word such as "apply" or "register".
 
 ## 6. Confidence
 

@@ -66,8 +66,12 @@ gh repo create trustguard-ai --public --source=. --remote=origin --push \
    git push -u origin main
    ```
 
-   When Git asks for a password, paste a **personal access token** (GitHub → Settings → Developer settings → Personal
-   access tokens → Fine-grained, with *Contents: Read and write* on this repository). Your account password won't work.
+   When Git asks for a password, paste a **personal access token**. Your account password won't work.
+
+   To create one: GitHub → Settings → Developer settings → Personal access tokens → Tokens (classic) → Generate new
+   token, and tick the **`repo`** and **`workflow`** scopes. The `workflow` scope is required because the project
+   contains `.github/workflows/ci.yml`; without it GitHub rejects the push. On Windows, Git Credential Manager opens a
+   browser sign-in instead and needs no token. `gh auth login` (Option A) also sets this up for you.
 
 ## 5. Make the repository page look finished
 
@@ -118,7 +122,7 @@ Keep the claims to what the repository shows:
 
 - Built Verioax, a Python security tool that redacts personal data, then explains whether a message, link or
   document is a scam or hoax. It is aimed at Indian e-challan, KYC and UPI fraud. It has a FastAPI backend, a Streamlit
-  UI, and 169 automated tests.
+  UI, and 229 automated tests.
 - Designed a PII engine with checksum validation for Aadhaar, PAN, GSTIN and cards, typed placeholders, and a leak sweep
   that re-attacks its own output.
 - Implemented an SSRF-guarded link inspector: public-IP pinning against DNS rebinding, per-hop redirect validation, size
@@ -126,3 +130,5 @@ Keep the claims to what the repository shows:
   Google Safe Browsing, VirusTotal, URLhaus and PhishTank.
 - Built a transparent, deterministic risk model with separate confidence, combination rules and documented guard rails,
   with a labelled regression set run in CI.
+- Added consumer and moderator accounts: scrypt password hashing, lockouts, a moderator PIN kept as a deployment secret,
+  per-account scan isolation, an activity log and a consumer feedback inbox.

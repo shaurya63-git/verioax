@@ -4,6 +4,9 @@
 Verioax removes your personal data first, then checks the content for scam and hoax signals, inspects every link, and
 explains its verdict in plain language: what it found, where, how sure it is, and what to do next.
 
+People sign in as **consumers**, who scan things and keep their own private history, or as **moderators**. Moderators
+also see accounts, traffic, the activity log and consumer feedback, and they need a moderator security PIN to sign in.
+
 ![A fake e-challan message analysed by Verioax: critical risk, highlighted evidence, recommended actions](docs/screenshots/message-scan.png)
 
 ## The problem
@@ -46,6 +49,31 @@ Verioax does the privacy step first, gives a verdict it can explain, and never o
 | ![Link report](docs/screenshots/link-report.png) | ![Original vs redacted](docs/screenshots/redaction.png) |
 | **Link report**: every check is marked pass, warning, fail or *not checked*, and says where the result came from. | **Original vs redacted**: scam warnings stay marked in the redacted copy you can share. |
 
+## Consumers and moderators
+
+| | |
+|---|---|
+| ![Sign-in page](docs/screenshots/sign-in.png) | ![Moderator overview](docs/screenshots/moderator-overview.png) |
+| **Sign in or create an account** as a consumer or a moderator. Moderators also enter the 6-digit moderator security PIN, at sign-up and at every sign-in. | **Moderator overview**: accounts, who is online, daily activity, scans, and what needs attention. |
+| ![Accounts](docs/screenshots/moderator-accounts.png) | ![Consumer feedback](docs/screenshots/moderator-feedback.png) |
+| **Accounts**: every consumer and moderator with their status (online, active, locked, suspended), activity, and suspend / reactivate / unlock actions. | **Consumer feedback**: complaints and "wrong result" reports, with the scan the consumer chose to attach, a status and a reply. |
+
+**Consumer UI**
+- Dashboard, message / link / file scanners and scan history. The history shows **only your own scans**.
+- **Feedback**: send feedback or a complaint to the moderators and read their replies. The **Report a wrong result**
+  button on any result opens the form with that scan attached.
+- **My account**: details, password change, and deleting your stored scans.
+
+**Moderator UI**
+- **Moderator overview**: traffic for the last 14 days and the items that need attention.
+- **Accounts**: the status of every account, with suspend, reactivate and unlock.
+- **Activity log**: sign-ins, failed attempts and wrong PINs, scans (type and verdict only), feedback and moderator
+  actions, with CSV export.
+- **Consumer feedback**: inbox with statuses (new, in review, resolved) and replies.
+- **Platform-wide pages**: threat intelligence, analytics across everyone's scans, and settings.
+
+Both UIs show **Founded by: Shaurya Shah** under System status in the sidebar.
+
 ## Features
 
 **Personal-data engine**
@@ -60,32 +88,46 @@ Verioax does the privacy step first, gives a verdict it can explain, and never o
 - A review queue for low-confidence findings, and clean / needs-review / blocked status.
 
 **Scam & hoax engine**
-- 29 indicators in English, Hinglish and Hindi, grouped into 15 categories (phishing, government or bank impersonation,
+- 36 indicators in English, Hinglish and Hindi, grouped into 15 categories (phishing, government or bank impersonation,
   digital arrest, task and job scams, prize and advance-fee fraud, investment scams, hoaxes and more).
-- A claimed-identity registry of 38 Indian government bodies, banks, payment apps, couriers and platforms, with their
-  official domains. Restricted registries such as `gov.in`, `nic.in`, `bank.in` and `.sbi` are recognised.
+- A claimed-identity registry of 52 Indian government bodies and schemes (PM-KISAN, Ayushman Bharat, PM Awas Yojana),
+  banks, payment apps, couriers, platforms and brands often used as bait (Amul, Tata, DMart, Meesho), with their official
+  domains. Restricted registries such as `gov.in`, `nic.in`, `bank.in` and `.sbi` are recognised.
 - Sender analysis:
   - TRAI DLT headers such as `VM-HDFCBK-S`
   - personal mobile numbers used in the name of an organisation
   - international numbers
 - Combination rules that recognise complete scam patterns. Example: *claims to be Parivahan + asks for payment + links to
   a domain Parivahan doesn't own*.
+- Viral scams and hoaxes:
+  - giveaways that must be forwarded to "unlock" them (anniversary gifts, spin-the-wheel, free recharges)
+  - fake government-scheme offers ("PM free laptop yojana")
+  - celebrity giveaways
+  - fear hoaxes (kidnapping gangs, "answering this call hacks your phone")
+  - widely debunked claims (GPS chips in banknotes, "WhatsApp will become paid")
+  
+  Fact-checks and warnings that quote a hoax are recognised and not held against the message.
 - Claims worth checking before you act or forward, with how to verify each one. Optionally, they are looked up in Google
   Fact Check.
 
 **Link engine**
 - Lookalike and typosquat detection (Damerau-Levenshtein), fake government domains, homographs and punycode, `@` tricks,
   IP-address hosts, shorteners, free hosting, frequently abused TLDs, APK downloads, and personal data in query strings.
+- Fake government-scheme domains (`pm-laptop-yojana.in`) and brand-giveaway domains (`amul-anniversary-gift.blogspot.com`).
 - Live checks through an **SSRF-guarded fetcher**. They record the redirect chain, inspect the page, check TLS, and look up
-  domain age through RDAP. The page inspection looks for card or OTP forms, government branding on non-government sites,
-  hidden text aimed at AI models, and APK links.
+  domain age through RDAP. The page inspection checks:
+  - card or OTP forms
+  - fake scheme registration forms that ask for Aadhaar or bank details
+  - government branding on non-government sites
+  - hidden text aimed at AI models, and APK links
+  - **what the page says**: "share with 5 groups to claim your gift", prizes, hoax claims
 - Threat intelligence:
   - built-in list of known scam domains (seeded with the published IOCs of the e-challan campaign)
   - Google Safe Browsing, VirusTotal, URLhaus, PhishTank and OpenPhish
   - every result is labelled *live*, *cached*, *local* or *not checked*
 
 **Product**
-- Streamlit web app with:
+- Streamlit web app with sign-in, a consumer UI and a moderator UI (see above), and:
   - a dashboard
   - message, link and file scanners (PDF, DOCX, TXT/CSV, and images through OCR)
   - searchable history
@@ -103,13 +145,23 @@ Verioax does the privacy step first, gives a verdict it can explain, and never o
 Requires Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/<your-username>/trustguard-ai.git
-cd trustguard-ai
+git clone https://github.com/<your-username>/verioax.git
+cd verioax
 python -m venv .venv
 source .venv/bin/activate            # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+cp .env.example .env                 # Windows: copy .env.example .env  - then set VERIOAX_MODERATOR_PIN in .env
 streamlit run app/streamlit_app.py   # opens http://localhost:8501
 ```
+
+Create an account on the sign-in page. Choose **Consumer**, or **Moderator** with the PIN you put in `.env`.
+
+**The moderator PIN is not in the code.** This repository is public, so a PIN written into it would let anyone become a
+moderator. Set it in `.env` for your own computer, and as a secret on a hosting platform:
+- Streamlit Community Cloud: app → Settings → Secrets → `VERIOAX_MODERATOR_PIN = "123456"`
+- Render: the service's Environment
+
+Without it, moderator sign-up and sign-in are switched off, and consumers can still use Verioax.
 
 To try it without any data of your own, use one of these:
 - **Try a sample** in the Message, URL or File scanner
@@ -163,7 +215,8 @@ All settings are optional. Copy `.env.example` to `.env`. `.env` is git-ignored,
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `TRUSTGUARD_DATA_DIR` | `data/runtime` | History database, lookup cache, preferences, your own indicator list |
+| `VERIOAX_MODERATOR_PIN` | empty | The 6-digit PIN moderators enter at sign-up and sign-in. Empty = no moderator access. Keep it out of the repository. |
+| `TRUSTGUARD_DATA_DIR` | `data/runtime` | Scan history, accounts and activity log, lookup cache, preferences, your own indicator list |
 | `TRUSTGUARD_API_URL` | empty | If set, the web app talks to this API instead of the in-process engine |
 | `TRUSTGUARD_API_TOKEN` | empty | Requires `Authorization: Bearer <token>` on every `/v1` route. Set it whenever the API is reachable from other machines. |
 | `TRUSTGUARD_FETCH_TIMEOUT_S` / `TRUSTGUARD_MAX_REDIRECTS` / `TRUSTGUARD_MAX_PAGE_BYTES` | 8 / 5 / 1500000 | Limits for live link checks |
@@ -201,6 +254,7 @@ The verdict is deterministic, rule-based scoring. An AI model never decides it.
 4. Guard rails:
    - A **confirmed** critical finding is always CRITICAL. An example is a link on a threat-intelligence blocklist, or a
      page that asks for card details.
+   - A **strong** indicator (something honest senders practically never do) is never reported as LOW.
    - Weak signals alone can never go above MEDIUM.
    - A message that hinges on a link nobody could verify is **INCONCLUSIVE**, not LOW.
 5. **Confidence** is computed separately, from how much evidence was actually available. A link that was never visited
@@ -231,14 +285,23 @@ The full model, every combination rule and a worked example are in [docs/scoring
 - **A link is cleaned before any lookup.** Query parameters that carry personal data are removed. A link with personal
   data in its path is not visited at all.
 - **API keys** are held as secrets. They are never logged, returned by the API or shown in the UI.
+- **Accounts:**
+  - Passwords are stored as salted scrypt hashes.
+  - Five wrong passwords or PINs lock an account for 15 minutes, and repeated wrong PINs at sign-up pause moderator
+    sign-up.
+  - Sign-in errors don't reveal whether an account exists.
+  - Each person's scan history is private to them. Moderators see traffic and activity (scan type and verdict, never
+    contents), and only see a scan's redacted result when a consumer attaches it to feedback.
+  - Feedback is redacted before it is stored.
 - **Note:** live checks connect from the machine running Verioax, so a scam site can see that machine's IP address.
   Use *local processing mode* in Settings, or run the backend on a separate server or VPN, if that matters to you.
 
 ## Project structure
 
 ```
-trustguard-ai/
+verioax/
 ├── trustguard/            # the engine (no UI code)
+│   ├── accounts.py        #   consumers and moderators, sign-in, lockout, activity log, feedback
 │   ├── engine.py          #   orchestrates one scan: PII → scam → links → combination → risk → actions
 │   ├── pii/               #   validators, recognisers, names, merge, redactor with leak sweep
 │   ├── scam/              #   indicators, sender analysis, claims, combination rules
@@ -252,7 +315,7 @@ trustguard-ai/
 │   ├── evaluation.py      #   regression evaluation on the labelled set
 │   └── schemas.py         #   every data model (pydantic)
 ├── api/main.py            # FastAPI app
-├── app/                   # Streamlit app: pages, components, client (local or API)
+├── app/                   # Streamlit app: sign-in, consumer and moderator pages, components, client (local or API)
 ├── data/iocs/             # seed list of known scam domains (defanged)
 ├── data/eval/             # labelled regression messages
 ├── samples/               # synthetic sample files for the File scanner
@@ -265,7 +328,7 @@ trustguard-ai/
 ## Testing
 
 ```bash
-pytest -q                          # 169 tests: PII, scam rules, URL checks, SSRF guard, risk model, API, reports, UI pages
+pytest -q                          # 229 tests: PII, scam and hoax rules, URL checks, SSRF guard, risk model, accounts, API, both UIs
 python -m trustguard.evaluation    # labelled regression set (prints misses; exit code 1 on regression)
 ruff check .
 ```
@@ -273,14 +336,15 @@ ruff check .
 The tests never touch the network. Live checks are faked with mock transports, and any real outbound connection fails
 the test.
 
-Current regression-set results (41 messages):
+Current regression-set results (87 samples: 71 messages and 16 links scanned on their own):
 
 | Measure | Result |
 |---|---|
-| Threats rated HIGH or CRITICAL | 20 / 20 |
-| Hoaxes flagged with a hoax indicator | 5 / 5 |
+| Scams rated HIGH or CRITICAL (messages and links) | 40 / 40 |
+| Hoaxes rated MEDIUM or above, with a hoax finding | 15 / 15 |
 | Unverifiable messages not rated LOW | 2 / 2 |
-| Genuine messages wrongly flagged | 0 / 14 |
+| Genuine messages and official links wrongly flagged | 0 / 27 |
+| Unknown but legitimate sites raised above "not verified" | 0 / 3 |
 
 The regression set was written alongside the rules, from public advisories. It catches rules that break or start firing
 on genuine messages. It is **not** an independent accuracy benchmark, so don't quote it as one. Real-world accuracy will
@@ -309,6 +373,14 @@ be lower, especially for new scam scripts.
   reduce this risk but do not remove it.
 - **OCR quality** depends on the image. PDF reports use DejaVu Sans, which has no Devanagari, so Hindi text in a PDF report
   may not render. The web app and the other report formats are unaffected.
+- **Accounts are for a small installation.** Sign-in lasts for the browser tab, so a reload signs you out. That is
+  deliberate: nothing reusable is stored in the browser. There is no "forgot password" email; a moderator can unlock a
+  locked account, and passwords can be changed under My account. All moderators share one PIN, so change it if it may
+  have leaked.
+- **Free hosting forgets accounts.** Accounts and history are stored on the app's own disk. Streamlit Community Cloud
+  wipes that disk whenever the app restarts or redeploys. Render's free tier wipes it too, including when the app
+  sleeps after 15 minutes without visitors. For accounts that last, use a host with a persistent disk (a paid Render
+  disk, a small VPS) or move the stores to a hosted database.
 - **LOW is not a guarantee.** It means nothing suspicious was found. Verify unexpected requests for money or details
   through official channels.
 

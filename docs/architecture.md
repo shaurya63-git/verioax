@@ -68,6 +68,9 @@ flowchart TD
 | PII findings | Type, placeholder, offsets, confidence, length, and a keyed fingerprint (HMAC with the installation secret in `data_dir/secret.key`) | Stored and returned, never the value. The fingerprint cannot be reversed without the key. |
 | Links | Shown defanged. Personal-data query parameters are removed before any lookup. | The cleaned URL goes to the threat-intel services you enabled |
 | API keys | `SecretStr` in `Settings` | Never logged, returned or shown |
+| Passwords | Salted scrypt hashes in `data_dir/accounts.sqlite` | Never stored in plain text, never shown |
+| Activity log | Event type, account, time, browser family ("Chrome on Windows"), scan type and verdict | Moderators only. No message contents and no IP addresses. Rows older than 180 days are deleted. |
+| Feedback | Redacted by the PII engine before it is stored | The consumer who sent it and moderators |
 
 The web app can highlight the original text in place because it holds that text in the browser session and the result
 carries offsets. No raw value is ever sent back from the engine to do this.
@@ -119,6 +122,32 @@ Visiting attacker-chosen URLs from a server is a classic SSRF risk. Each hop is 
   - size limits before processing
   - security headers
   - generic error messages that never echo input back
+
+## Accounts and roles
+
+`trustguard/accounts.py` holds accounts, the activity log and feedback in their own SQLite database
+(`data_dir/accounts.sqlite`). The Streamlit app uses it directly, also when scans go through the separate API.
+
+- **Two roles.** A *consumer* scans things and sees only their own history. A *moderator* also gets the moderation
+  pages (overview, accounts, activity log, consumer feedback) and the platform-wide pages (threat intelligence,
+  analytics, settings). `app/streamlit_app.py` builds a different navigation for each role, and every page checks the
+  role again with `auth.require()`, so a URL typed by hand can't open a moderator page.
+- **The moderator PIN** comes from `VERIOAX_MODERATOR_PIN` (`.env` or the host's secrets) and is never in the code. It
+  must be exactly 6 digits, otherwise moderator access is switched off. It is asked at sign-up and at every sign-in.
+- **Passwords** use `hashlib.scrypt` (N = 2^14, r = 8, p = 5) with a 16-byte salt and a constant-time comparison. An
+  unknown username is checked against a dummy hash, so the response time doesn't reveal which accounts exist, and every
+  sign-in failure shows the same message.
+- **Lockouts.** Five wrong passwords or PINs lock an account for 15 minutes. Ten wrong PINs at sign-up within 15 minutes
+  pause moderator sign-up for everyone, which makes guessing the PIN impractical.
+- **Sessions** last one browser tab and end after 60 minutes without activity. The account is re-read on every page,
+  so a suspension takes effect at once.
+- **Scan ownership.** Every stored scan has an `owner_id`. The app wraps the engine client in a `ScopedClient` that
+  passes the signed-in account to every call. Moderator pages that need everyone's scans use `client().everyone`. The
+  API takes the owner in the `X-Verioax-Owner` header. When the API runs separately, set `TRUSTGUARD_API_TOKEN` so that
+  only the web app can call it.
+- **What moderators see.** Traffic, the activity log and account status, never the contents of a consumer's scans. A
+  consumer can attach one of their scans to feedback ("Report a wrong result"); only that scan's redacted result is
+  then shown to moderators.
 
 ## Extending it
 

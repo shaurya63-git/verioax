@@ -141,3 +141,15 @@ def test_engine_keeps_one_secret_per_installation(settings, prefs):
     h1 = e1.scan_message("Call me on 9876543210").result.pii.findings[0].value_hash
     h2 = e2.scan_message("My number is +91 98765 43210").result.pii.findings[0].value_hash
     assert h1 == h2
+
+
+@pytest.mark.parametrize("text,name", [("My aunt Sunita Sharma got this forward.", "Sunita Sharma"), ("our neighbour Ravi said so", "Ravi"),
+                                       ("Please ask Sunita didi to call back.", "Sunita"), ("Sharma ji will pay the bill.", "Sharma")])
+def test_names_after_relationship_words_and_before_respectful_suffixes(text, name):
+    red = analyze_pii(text)[1].redacted_text
+    assert name not in red and "[PERSON_001]" in red
+
+
+@pytest.mark.parametrize("text", ["Thank you sir, see you Monday.", "My friend said the Parivahan site was down.", "Dear Customer, your KYC is due."])
+def test_no_false_names_from_the_new_rules(text):
+    assert analyze_pii(text)[1].redacted_text == text

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import streamlit as st
 
+import auth
 import results
 import ui
 from client import ClientError
@@ -14,6 +15,7 @@ SAMPLES = {"KYC phishing email (PDF)": "kyc_phishing_email.pdf", "Forwarded mess
            "SMS screenshot (image, OCR)": "challan_sms_screenshot.png"}
 SAMPLES = {label: name for label, name in SAMPLES.items() if (SAMPLE_DIR / name).is_file()}
 
+auth.require()
 ui.page_header("File scanner", "Upload a document or a screenshot. Verioax extracts the text, finds and removes personal data, "
                                "and checks the content and its links for scams.")
 

@@ -19,7 +19,7 @@ from collections import defaultdict, deque
 from datetime import datetime
 from typing import Literal
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, Request, UploadFile
 from fastapi.responses import JSONResponse, PlainTextResponse, Response
 from pydantic import BaseModel, Field
 
@@ -102,6 +102,11 @@ def create_app(engine: TrustGuardEngine | None = None) -> FastAPI:
         log.error("unhandled error: %s", type(exc).__name__)
         return JSONResponse({"detail": "Internal error while analysing the input."}, status_code=500)
 
+    def owner(x_verioax_owner: int | None = Header(None, ge=1, description=(
+            "Account id of the web-app user the request is made for. Set by the Verioax web app, which authenticates with "
+            "the API token; scans are stored under that account and history is filtered to it."))) -> int | None:
+        return x_verioax_owner
+
     # ------------------------------------------------------------------ health
     @app.get("/health")
     def health(eng: TrustGuardEngine = Depends(get_engine)):
@@ -110,49 +115,52 @@ def create_app(engine: TrustGuardEngine | None = None) -> FastAPI:
 
     # ------------------------------------------------------------------ scans
     @app.post("/v1/scan/message", response_model=ScanResult, dependencies=[Depends(auth), Depends(rate)])
-    def scan_message(req: MessageScanRequest, eng: TrustGuardEngine = Depends(get_engine)):
-        return eng.scan_message(req.text, sender=req.sender, mode=req.mode, demo=req.demo).result
+    def scan_message(req: MessageScanRequest, eng: TrustGuardEngine = Depends(get_engine), owner_id: int | None = Depends(owner)):
+        return eng.scan_message(req.text, sender=req.sender, mode=req.mode, demo=req.demo, owner_id=owner_id).result
 
     @app.post("/v1/scan/url", response_model=ScanResult, dependencies=[Depends(auth), Depends(rate)])
-    def scan_url(req: URLScanRequest, eng: TrustGuardEngine = Depends(get_engine)):
-        return eng.scan_url(req.url).result
+    def scan_url(req: URLScanRequest, eng: TrustGuardEngine = Depends(get_engine), owner_id: int | None = Depends(owner)):
+        return eng.scan_url(req.url, owner_id=owner_id).result
 
     @app.post("/v1/scan/file", response_model=ScanResult, dependencies=[Depends(auth), Depends(rate)])
-    async def scan_file(file: UploadFile = File(...), mode: AnalysisMode = Form(AnalysisMode.FULL), eng: TrustGuardEngine = Depends(get_engine)):
+    async def scan_file(file: UploadFile = File(...), mode: AnalysisMode = Form(AnalysisMode.FULL), eng: TrustGuardEngine = Depends(get_engine),
+                        owner_id: int | None = Depends(owner)):
         data = await file.read(MAX_FILE_BYTES + 1)
         if len(data) > MAX_FILE_BYTES:
             raise HTTPException(413, f"File too large (limit {MAX_FILE_BYTES // (1024 * 1024)} MB).")
-        return eng.scan_file(file.filename or "upload", data, mode=mode).result
+        return eng.scan_file(file.filename or "upload", data, mode=mode, owner_id=owner_id).result
 
     # ------------------------------------------------------------------ history
     @app.get("/v1/scans", dependencies=[Depends(auth)])
     def list_scans(risk: list[str] | None = Query(None), input_type: list[str] | None = Query(None), category: str | None = None,
                    search: str | None = Query(None, max_length=80), since: datetime | None = None, until: datetime | None = None,
                    limit: int = Query(100, le=1000),
-                   eng: TrustGuardEngine = Depends(get_engine)):
+                   eng: TrustGuardEngine = Depends(get_engine), owner_id: int | None = Depends(owner)):
         if eng.store is None:
             return []
-        return eng.store.list(limit=limit, risk=risk, input_type=input_type, category=category, search=search, since=since, until=until)
+        return eng.store.list(limit=limit, risk=risk, input_type=input_type, category=category, search=search, since=since, until=until,
+                              owner_id=owner_id)
 
-    def _get(scan_id: str, eng: TrustGuardEngine) -> ScanResult:
-        r = eng.store.get(scan_id) if eng.store else None
+    def _get(scan_id: str, eng: TrustGuardEngine, owner_id: int | None = None) -> ScanResult:
+        r = eng.store.get(scan_id, owner_id=owner_id) if eng.store else None
         if r is None:
             raise HTTPException(404, "Scan not found.")
         return r
 
     @app.get("/v1/scans/{scan_id}", response_model=ScanResult, dependencies=[Depends(auth)])
-    def get_scan(scan_id: str, eng: TrustGuardEngine = Depends(get_engine)):
-        return _get(scan_id, eng)
+    def get_scan(scan_id: str, eng: TrustGuardEngine = Depends(get_engine), owner_id: int | None = Depends(owner)):
+        return _get(scan_id, eng, owner_id)
 
     @app.delete("/v1/scans/{scan_id}", dependencies=[Depends(auth)])
-    def delete_scan(scan_id: str, eng: TrustGuardEngine = Depends(get_engine)):
-        if not (eng.store and eng.store.delete(scan_id)):
+    def delete_scan(scan_id: str, eng: TrustGuardEngine = Depends(get_engine), owner_id: int | None = Depends(owner)):
+        if not (eng.store and eng.store.delete(scan_id, owner_id=owner_id)):
             raise HTTPException(404, "Scan not found.")
         return {"deleted": scan_id}
 
     @app.get("/v1/scans/{scan_id}/report.{fmt}", dependencies=[Depends(auth)])
-    def scan_report(scan_id: str, fmt: Literal["json", "csv", "md", "pdf"], eng: TrustGuardEngine = Depends(get_engine)):
-        r = _get(scan_id, eng)
+    def scan_report(scan_id: str, fmt: Literal["json", "csv", "md", "pdf"], eng: TrustGuardEngine = Depends(get_engine),
+                    owner_id: int | None = Depends(owner)):
+        r = _get(scan_id, eng, owner_id)
         name = f"verioax-{scan_id}.{fmt}"
         disp = {"Content-Disposition": f'attachment; filename="{name}"'}
         if fmt == "pdf":

@@ -105,6 +105,35 @@ h1, h2, h3 {{ letter-spacing: -0.01em; }}
 .tg-status .row {{ display:flex; gap:.45rem; align-items: baseline; }}
 .tg-status .dot {{ width: .5rem; height: .5rem; border-radius: 50%; display:inline-block; flex: none; transform: translateY(-1px); }}
 .tg-status b {{ color: var(--tg-ink2); font-weight: 500; }}
+.tg-founder {{ margin-top: .9rem; padding-top: .65rem; border-top: 1px solid var(--tg-line); font-size: .8rem; color: var(--tg-ink3); }}
+.tg-founder b {{ color: var(--tg-ink2); font-weight: 500; }}
+.tg-user {{ font-size: .85rem; color: var(--tg-ink2); line-height: 1.45; margin: .1rem 0 .35rem 0; }}
+.tg-user b {{ color: var(--tg-ink); font-weight: 600; }}
+.tg-fb {{ white-space: pre-wrap; color: var(--tg-ink); font-size: .95rem; line-height: 1.55; margin: .25rem 0 .4rem 0; max-width: 90ch; }}
+.tg-reply {{ border-left: 3px solid var(--tg-accent, #4C8DF6); padding: .35rem 0 .35rem .8rem; color: var(--tg-ink2); font-size: .92rem;
+             white-space: pre-wrap; margin: .4rem 0; max-width: 90ch; }}
+.tg-meta {{ color: var(--tg-ink3); font-size: .82rem; }}
+.tg-facts {{ width:100%; border-collapse: collapse; font-size: .92rem; margin: .2rem 0; }}
+.tg-facts td {{ padding: .4rem 0; border-bottom: 1px solid var(--tg-line); vertical-align: top; color: var(--tg-ink); }}
+.tg-facts td.k {{ color: var(--tg-ink3); width: 9.5rem; padding-right: .8rem; }}
+.tg-facts tr:last-child td {{ border-bottom: 0; }}
+.tg-fbhead {{ display:flex; flex-wrap: wrap; gap: .5rem; align-items: center; font-size: 1rem; margin-bottom: .15rem; }}
+.tg-fbhead b {{ color: var(--tg-ink); font-weight: 600; margin-right: .2rem; }}
+
+/* sign-in page */
+.tg-hero h1 {{ font-size: 2.5rem; line-height: 1.12; margin: .4rem 0 .9rem 0; letter-spacing: -0.01em; font-weight: 600; }}
+.tg-hero p {{ color: var(--tg-ink2); font-size: 1.04rem; max-width: 50ch; margin: 0 0 .5rem 0; }}
+.tg-sample {{ margin-top: 1.5rem; border: 1px solid var(--tg-line); border-left: 4px solid #E05252; border-radius: 10px;
+              background: var(--tg-panel); padding: .95rem 1.1rem; max-width: 56ch; }}
+.tg-sample .lbl {{ font-size: .78rem; color: var(--tg-ink3); margin-bottom: .45rem; }}
+.tg-sample .txt {{ font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: .84rem; color: var(--tg-ink); line-height: 1.65; }}
+.tg-sample .ph {{ color: #B9D3FF; }}
+.tg-sample .bad {{ background: rgba(224,82,82,.16); border-bottom: 2px solid #E05252; padding: 0 .1rem; }}
+.tg-sample .verdict {{ margin-top: .65rem; font-size: .86rem; color: #F3A6A6; font-weight: 500; }}
+.tg-steps {{ margin: 1.3rem 0 0 0 !important; padding: 0 !important; list-style: none; color: var(--tg-ink2); font-size: .95rem; max-width: 56ch; }}
+.tg-steps li {{ margin-left: 0 !important; padding-left: 0 !important; }}
+.tg-steps li {{ margin: .3rem 0; }}
+.tg-steps b {{ color: var(--tg-ink); font-weight: 600; }}
 @media (prefers-reduced-motion: reduce) {{ * {{ transition: none !important; animation: none !important; }} }}
 </style>
 """
@@ -112,6 +141,45 @@ h1, h2, h3 {{ letter-spacing: -0.01em; }}
 
 def inject_css() -> None:
     st.html(CSS)
+
+
+FOUNDER = "Shaurya Shah"
+# (hex colour, word) - colour is always paired with the word
+STATE_PILL = {"online": ("#2DBA6B", "Online"), "active": ("#7FA8F0", "Active"), "locked": ("#FAB219", "Locked"), "suspended": ("#E05252", "Suspended")}
+FEEDBACK_PILL = {"new": ("#7FA8F0", "New"), "in_review": ("#FAB219", "In review"), "resolved": ("#2DBA6B", "Resolved")}
+NEUTRAL = "#A9B6CA"
+
+
+def local_time(iso: str | None, fmt: str = "%d %b %Y, %H:%M") -> str:
+    """An ISO timestamp (UTC) in the viewer's own time zone, as reported by their browser."""
+    if not iso:
+        return "-"
+    from datetime import datetime, timedelta, timezone
+    dt = datetime.fromisoformat(iso)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    try:
+        tz_name, offset = st.context.timezone, st.context.timezone_offset
+    except Exception:                                   # no browser context (tests, scripts)
+        tz_name, offset = None, None
+    if tz_name:
+        try:
+            from zoneinfo import ZoneInfo
+            return dt.astimezone(ZoneInfo(tz_name)).strftime(fmt)
+        except Exception:                               # e.g. 'Asia/Calcutta' missing from a minimal time-zone database
+            pass
+    if offset is not None:                              # JavaScript convention: minutes *behind* UTC (India = -330)
+        return dt.astimezone(timezone(timedelta(minutes=-offset))).strftime(fmt)
+    return dt.astimezone(timezone.utc).strftime(fmt) + " UTC"
+
+
+def facts_table(rows) -> str:
+    """Label / value rows, every value escaped."""
+    return "<table class='tg-facts'>" + "".join(f"<tr><td class='k'>{esc(k)}</td><td>{esc(v)}</td></tr>" for k, v in rows) + "</table>"
+
+
+def founder_html() -> str:
+    return f"<div class='tg-founder'>Founded by: <b>{esc(FOUNDER)}</b></div>"
 
 
 def page_header(title: str, subtitle: str = "") -> None:
@@ -126,7 +194,7 @@ def verdict_panel(r) -> str:
     color = STATUS[lvl]
     basis = "Privacy exposure score" if r.risk_basis == "privacy" else "Risk score"
     ev = r.evidence_summary or {}
-    facts = [("Scan", r.scan_id), ("When", f"{r.created_at:%d %b %Y, %H:%M} UTC"),
+    facts = [("Scan", r.scan_id), ("When", local_time(r.created_at.isoformat())),
              ("Checked", ", ".join({"pii": "personal data", "scam": "scam & hoax", "url": "links", "intel": "threat intel", "llm": "local AI"}.get(m, m)
                                    for m in r.processing.modules) or "-")]
     if r.risk_basis == "threat" and any(ev.values()):

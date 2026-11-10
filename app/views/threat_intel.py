@@ -1,10 +1,12 @@
 import pandas as pd
 import streamlit as st
 
+import auth
 import ui
 from client import ClientError
 from state import client
 
+auth.require("moderator")
 ui.page_header("Threat intelligence", "The outside sources Verioax can ask about a link, whether each one is set up and working, "
                                       "and the local list of known scam domains.")
 c = client()
@@ -82,7 +84,7 @@ else:
 
 st.subheader("Recent threat-intelligence matches")
 hits = []
-for r in c.results(500):
+for r in c.everyone.results(500):
     for u in r.urls:
         for rep in u.reputation:
             if rep.status in ("listed", "suspicious"):

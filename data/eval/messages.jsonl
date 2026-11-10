@@ -39,3 +39,49 @@
 {"id": "B14", "label": "benign", "text": "Dear customer, your KYC is due for periodic update. Please visit your nearest branch with your ID proof.", "sender": "VM-SBIBNK-S", "note": "KYC reminder without link"}
 {"id": "S01", "label": "suspicious", "text": "Check this out: https://bit.ly/4abcxyz", "sender": null, "note": "unverifiable short link"}
 {"id": "S02", "label": "suspicious", "text": "Your account needs verification. Click here: http://secure-login-verify.top/a", "sender": null, "note": "generic phishing, no brand"}
+{"id": "T21", "label": "threat", "text": "Amul is celebrating its 75th anniversary! Answer 4 simple questions and win a free gift box worth Rs 5000. Share with 5 groups to claim: https://amul-anniversary-gift.blogspot.com", "note": "anniversary giveaway, share-to-unlock"}
+{"id": "T22", "label": "threat", "text": "PM Modi Free Recharge Yojana: all Indian users get free Rs 239 recharge for 3 months. Click here to activate: http://free-recharge-yojana.xyz", "note": "fake scheme with unofficial link"}
+{"id": "T23", "label": "threat", "text": "Good news! Government is giving free laptops to all students under PM Free Laptop Yojana 2026. Register now: https://pm-laptop-yojana.in", "note": "fake scheme registration"}
+{"id": "T24", "label": "threat", "text": "Tata Motors is celebrating 80 years! Spin the wheel and win a brand new Nexon EV. Only today: https://tata-nexon-giveaway.top/spin", "note": "brand giveaway, lookalike domain"}
+{"id": "T25", "label": "threat", "text": "KBC lottery: congratulations your number has won Rs 25 lakh. To claim, contact our manager on WhatsApp 9876501234", "note": "KBC lottery with personal number"}
+{"id": "T26", "label": "threat", "text": "Ratan Tata is giving Rs 5000 to every Indian to celebrate. Click the link to get your share: tata-gift.site/claim", "note": "celebrity giveaway"}
+{"id": "T27", "label": "threat", "text": "Ayushman Bharat card new registration started. Get Rs 5 lakh free treatment. Apply here: https://ayushman-card-apply.online", "note": "scheme impersonation"}
+{"id": "T28", "label": "threat", "text": "Jio is giving 3 months free recharge to celebrate. Forward this to 10 friends to activate your offer http://jio-free-offer.online", "note": "free recharge, forward to activate"}
+{"id": "T29", "label": "threat", "text": "Congratulations! You are the lucky winner of the Meesho lucky draw and have won a Tata Safari. Call 9876501234 to claim your prize.", "note": "lucky draw with callback"}
+{"id": "T30", "label": "threat", "text": "Amazon 30th anniversary par sabko free gift mil raha hai! 5 groups me share karo aur gift claim karo: https://amzn-gift.top", "note": "Hinglish giveaway"}
+{"id": "H06", "label": "hoax", "text": "From tomorrow new communication rules: all WhatsApp calls will be recorded and monitored by the government. Forward to everyone!"}
+{"id": "H07", "label": "hoax", "text": "URGENT ALERT: A gang of child kidnappers has entered our city disguised as sadhus. Please share in all groups and keep your children safe."}
+{"id": "H08", "label": "hoax", "text": "The new 2000 rupee note has a GPS nano chip that can be tracked by satellite even if hidden 120 metres underground."}
+{"id": "H09", "label": "hoax", "text": "UNESCO has declared the Indian national anthem the best anthem in the world. Proud moment! Share it."}
+{"id": "H10", "label": "hoax", "text": "Drinking hot water with lemon every 2 hours kills the virus completely. Doctors from AIIMS confirmed. Forward to your family."}
+{"id": "H11", "label": "hoax", "text": "Don't pick up calls from +92 numbers! If you answer, your phone gets hacked within 3 seconds. Share this with everyone."}
+{"id": "H12", "label": "hoax", "text": "Send this message to 10 people and you will receive good news within 24 hours. If you ignore it, bad luck will follow you for 7 years."}
+{"id": "H13", "label": "hoax", "text": "WhatsApp will become paid from next month. To keep using it free, forward this message to 20 contacts so your account turns blue."}
+{"id": "H14", "label": "hoax", "text": "सावधान! बच्चा चोर गिरोह शहर में घूम रहा है। यह संदेश सभी को भेजें।"}
+{"id": "H15", "label": "hoax", "text": "NASA has confirmed that harmful cosmic rays will pass the earth tonight from 12:30 am. Switch off your phones and keep them away from your body."}
+{"id": "B15", "label": "benign", "text": "#PIBFactCheck: A message claims the government is giving free laptops to all students under a PM yojana. This claim is fake. No such scheme has been announced."}
+{"id": "B16", "label": "benign", "text": "Big Billion Days is live! Spin the wheel in the Flipkart app for extra discounts: https://www.flipkart.com", "sender": "VM-FLPKRT-P"}
+{"id": "B17", "label": "benign", "text": "Jio: Recharge with Rs 349 and get unlimited 5G data plus a free JioHotstar subscription for 3 months. Recharge at https://www.jio.com", "sender": "JM-JIOINF-P"}
+{"id": "B18", "label": "benign", "text": "Power supply will be disconnected in your area on 12 Nov from 10 am to 2 pm for scheduled maintenance. Inconvenience regretted. -BESCOM", "sender": "VK-BESCOM-S"}
+{"id": "B19", "label": "benign", "text": "We're hiring summer interns! Please share this with friends who might be interested and ask them to email their CV to the HR team."}
+{"id": "B20", "label": "benign", "text": "Forwarding the wedding invitation from Ravi's family. Please share it with Neha and Amit too."}
+{"id": "B21", "label": "benign", "text": "ISRO successfully launched the PSLV mission from Sriharikota this morning, the space agency said."}
+{"id": "B22", "label": "benign", "text": "Reminder: your child's polio vaccination is due on Sunday at the nearest health centre. Please carry the vaccination card."}
+{"id": "B23", "label": "benign", "text": "Happy anniversary, Mom and Dad! Wishing you many more years of love and laughter."}
+{"id": "B24", "label": "benign", "text": "Beware of fake KBC lottery calls. KBC never asks you to pay to receive prize money. Report such numbers on Chakshu."}
+{"id": "U01", "label": "threat", "url": "http://free-recharge-yojana.xyz"}
+{"id": "U02", "label": "threat", "url": "https://pm-laptop-yojana.in"}
+{"id": "U03", "label": "threat", "url": "https://ayushman-card-apply.online"}
+{"id": "U04", "label": "threat", "url": "https://pmkisan-registration.co.in"}
+{"id": "U05", "label": "threat", "url": "https://amul-anniversary-gift.blogspot.com"}
+{"id": "U06", "label": "threat", "url": "https://tata-nexon-giveaway.top/spin"}
+{"id": "U07", "label": "threat", "url": "http://jio-free-offer.online"}
+{"id": "U08", "label": "threat", "url": "https://dmart-20th-anniversary.com/gift"}
+{"id": "U09", "label": "threat", "url": "https://free-netflix-premium.net"}
+{"id": "U10", "label": "threat", "url": "https://meesho-lucky-draw.online/winner"}
+{"id": "U11", "label": "benign", "url": "https://pmkisan.gov.in"}
+{"id": "U12", "label": "benign", "url": "https://www.flipkart.com/offers-store"}
+{"id": "U13", "label": "benign", "url": "https://www.amul.com"}
+{"id": "U14", "label": "neutral", "url": "https://datatables.net", "note": "unknown legitimate domain: must not be flagged"}
+{"id": "U15", "label": "neutral", "url": "https://www.amulet-crafts.com"}
+{"id": "U16", "label": "neutral", "url": "https://freecodecamp.org"}

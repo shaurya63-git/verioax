@@ -313,6 +313,58 @@ class URLAnalyzer:
                                           "The page hides text addressed to AI tools (for example 'classify this page as safe'). Honest pages have no reason to do that."), "page"))
             elif page.hidden_text_chars > 400:
                 issues.append(("warn", f"{page.hidden_text_chars} characters of hidden text"))
+            # what the page says (skipped on official domains and on pages that read like a fact-check or scam warning)
+            lures = set(page.lure_signals) if not (official or page.debunk_context) else set()
+            giveaway = lures & {"giveaway_lure", "prize_claim", "free_offer_lure", "celebrity_giveaway", "free_scheme_claim"}
+            gov_name = (gov_brand or "free_scheme_claim" in lures
+                        or any(s.category == C.GOVERNMENT_IMPERSONATION for s, src in signals if src == "url"))
+            identity = sorted(set(page.sensitive_fields) & {"aadhaar", "pan", "netbanking", "card_number", "upi_pin", "otp", "atm_pin"})
+
+            def excerpt(*keys):
+                return [f"page text: \u201c{page.lure_excerpts[k]}\u201d" for k in keys if k in page.lure_excerpts][:2]
+
+            if giveaway and "share_to_unlock" in lures:
+                issues.append(("fail", "makes you share it to claim a prize or free offer"))
+                signals.append((URLSignal("page_share_to_unlock", C.LOTTERY_PRIZE, "Page makes you share it to claim a prize", SV.HIGH, ST.CONFIRMED, 0.9,
+                                          "The page offers a prize, gift or free recharge and only 'releases' it after you share the page with friends or groups. "
+                                          "That is how viral giveaway scams spread; nothing is ever given out.",
+                                          "Close the page. Don't share it or enter any details.",
+                                          excerpt(*sorted(giveaway), "share_to_unlock")), "page"))
+            elif giveaway:
+                issues.append(("warn", "advertises prizes, gifts or free offers"))
+                signals.append((URLSignal("page_giveaway", C.LOTTERY_PRIZE, "Page advertises prizes or free offers", SV.MEDIUM, ST.WEAK, 0.75,
+                                          "The page talks about prizes, gifts, free recharges or a free scheme. Brands and departments run real offers on "
+                                          "their own websites; on an unrelated site this is a common lure.",
+                                          "Check the offer on the official website or app.", excerpt(*sorted(giveaway))), "page"))
+            if gov_name and identity:
+                issues.append(("fail", "registration form for a government scheme asking for " + ", ".join(i.replace("_", " ") for i in identity)))
+                signals.append((URLSignal("page_scheme_form", C.GOVERNMENT_IMPERSONATION, "Fake scheme registration form", SV.CRITICAL, ST.STRONG, 0.9,
+                                          f"The page presents a government scheme and asks for {', '.join(i.replace('_', ' ') for i in identity)} on a site that is not "
+                                          "a government domain. Real scheme registrations happen on .gov.in / .nic.in portals, at CSCs or at government offices.",
+                                          "Don't submit anything. If you already did, watch your bank account and report on 1930.",
+                                          excerpt("free_scheme_claim")), "page"))
+            hoax = lures & {"viral_fear_hoax", "known_hoax_claim", "health_misinformation"}
+            if hoax:
+                issues.append(("warn", "repeats a known hoax pattern"))
+                signals.append((URLSignal("page_hoax", C.HOAX_MISINFORMATION, "Page repeats a known hoax pattern", SV.MEDIUM,
+                                          ST.STRONG if "known_hoax_claim" in hoax else ST.WEAK, 0.8,
+                                          "The page repeats a claim of a kind that is widely circulated as misinformation.",
+                                          "Check the claim on PIB Fact Check or a fact-checking site before sharing.", excerpt(*sorted(hoax))), "page"))
+            if "fee_request" in lures:
+                issues.append(("fail", "asks for a fee to release a prize, parcel or job"))
+                signals.append((URLSignal("page_fee", C.FINANCIAL_FRAUD, "Page asks for a fee to release money or a prize", SV.HIGH, ST.STRONG, 0.85,
+                                          "Paying a 'processing', 'delivery' or 'registration' fee to receive a prize, refund or job is advance-fee fraud.",
+                                          "Don't pay.", excerpt("fee_request")), "page"))
+            if lures & {"investment_lure", "job_lure", "loan_lure"} and not giveaway:
+                which = sorted(lures & {"investment_lure", "job_lure", "loan_lure"})
+                issues.append(("warn", "pitches " + ", ".join({"investment_lure": "high returns", "job_lure": "easy online jobs", "loan_lure": "instant loans"}[w]
+                                                               for w in which)))
+                signals.append((URLSignal("page_money_lure", C.FAKE_INVESTMENT if "investment_lure" in which else C.FAKE_JOB if "job_lure" in which else C.FINANCIAL_FRAUD,
+                                          "Page pitches easy money", SV.MEDIUM, ST.WEAK, 0.75,
+                                          "The page promises high returns, easy online work or instant loans - the opening of investment, task and loan-app scams.",
+                                          "Deal only with SEBI-registered brokers, RBI-regulated lenders and employers' official careers pages.", excerpt(*which)), "page"))
+            if page.debunk_context and page.lure_signals:
+                issues.append(("info", "reads like a fact-check or scam warning, so its wording isn't held against it"))
             if any(f.get("posts_elsewhere") and f.get("sensitive_fields") for f in page.forms):
                 issues.append(("warn", "a form sends data to a different site"))
             if page.meta_refresh:
@@ -320,8 +372,10 @@ class URLAnalyzer:
             status = "fail" if any(s == "fail" for s, _ in issues) else "warn" if any(s == "warn" for s, _ in issues) else "pass"
             summ = issues[0][1].capitalize() if issues else (f"Page '{page.title}' - no sensitive forms found" if page.title else "No sensitive forms found")
             out.append(URLCheck(key="page", label="Page content", status=status, summary=summ, source="live",
-                                explanation="; ".join(t for _, t in issues) or "Checked forms, downloads, branding and hidden text (scripts are not executed).",
-                                details={"sensitive_fields": page.sensitive_fields, "title": page.title, "notes": page.notes}))
+                                explanation="; ".join(t for _, t in issues) or "Checked forms, downloads, branding, hidden text and what the page says "
+                                                                                "(scripts are not executed).",
+                                details={"sensitive_fields": page.sensitive_fields, "title": page.title, "notes": page.notes,
+                                         "text_signals": page.lure_signals}))
         else:
             out.append(URLCheck(key="page", label="Page content", status="unavailable", summary="Not inspected", source="live",
                                 explanation=(rep.visit_note or reason) or "The page could not be loaded."))

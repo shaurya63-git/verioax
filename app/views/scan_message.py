@@ -1,5 +1,6 @@
 import streamlit as st
 
+import auth
 import results
 import ui
 from client import ClientError
@@ -9,6 +10,7 @@ from trustguard.schemas import AnalysisMode
 
 MODES = {AnalysisMode.FULL: "Full security analysis", AnalysisMode.SCAM: "Scam & hoax only", AnalysisMode.PII: "Personal data only"}
 
+auth.require()
 ui.page_header("Message scanner", "Paste an SMS, WhatsApp message, email or social media message you received. "
                                   "Verioax checks it for scam and hoax signals, checks every link it contains, and removes personal data.")
 

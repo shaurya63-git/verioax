@@ -47,6 +47,14 @@ _LABEL = re.compile(rf"(?i:\b(?:full\s+name|name|customer\s+name|account\s+holde
                     rf"employee\s+name|candidate\s+name|owner\s+name|registered\s+owner|driver\s+name))\s*[:\-–]\s*({_CAPS_NAME}|{_NAME})")
 _GREETING = re.compile(rf"\b(?:Dear|Hi|Hello|Hey|Namaste|Namaskar|Respected)\s+({_NAME_TOKEN}(?:\s+{_NAME_TOKEN}){{0,2}})\b")
 _INTRO = re.compile(rf"\b(?i:my\s+name\s+is|this\s+is|i\s+am|i'm)\s+({_NAME_TOKEN}(?:\s+{_NAME_TOKEN}){{0,2}})\b")
+# "my aunt Sunita Sharma", "our neighbour Ravi" - a relationship word followed by a capitalised name
+_RELATION = re.compile(rf"\b(?i:my|our|his|her|their|your)\s+(?i:aunt|aunty|auntie|uncle|mother|mom|mum|father|dad|brother|sister|son|"
+                       rf"daughter|wife|husband|friend|neighbou?r|cousin|grandmother|grandfather|grandma|grandpa|nephew|niece|colleague|"
+                       rf"boss|landlord|tenant|maid|driver|teacher|classmate|roommate|mama|mami|mausi|masi|chacha|chachi|bua|nani|nana|"
+                       rf"dadi|dada|bhaiya|bhai|didi|bhabhi|jiju)\s+({_NAME_TOKEN}(?:\s+{_NAME_TOKEN}){{0,2}})\b")
+# "Sunita didi", "Sharma ji", "Ramesh uncle" - a capitalised name followed by a respectful or family suffix
+_SUFFIX = re.compile(rf"\b({_NAME_TOKEN}(?:\s+{_NAME_TOKEN})?)\s+(?:ji|jee|didi|bhaiya|bhai|aunty|auntie|uncle|mausi|chacha|chachi|bhabhi|"
+                     rf"bhabhiji|sahab|saheb)\b")
 _SIGNOFF = re.compile(rf"(?i:\b(?:regards|thanks|thank\s+you|sincerely|warm\s+regards|best\s+regards|yours\s+(?:truly|faithfully|sincerely)))\s*,?\s*\n+\s*({_NAME_TOKEN}(?:\s+{_NAME_TOKEN}){{0,2}})\b")
 
 
@@ -87,7 +95,8 @@ def _trim(name: str, start: int) -> tuple[str, int, int] | None:
 def rule_names(t: str) -> list[Candidate]:
     out: list[Candidate] = []
     specs = ((_HONORIFIC, 0.90, "rule:honorific"), (_LABEL, 0.90, "rule:name-label"), (_GREETING, 0.80, "rule:greeting"),
-             (_INTRO, 0.72, "rule:self-intro"), (_SIGNOFF, 0.75, "rule:sign-off"))
+             (_INTRO, 0.72, "rule:self-intro"), (_SIGNOFF, 0.75, "rule:sign-off"), (_RELATION, 0.78, "rule:relation"),
+             (_SUFFIX, 0.70, "rule:name-suffix"))
     for rx, conf, det in specs:
         for m in rx.finditer(t):
             raw = m.group(1)

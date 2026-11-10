@@ -3,13 +3,16 @@ from datetime import datetime, time, timezone
 import pandas as pd
 import streamlit as st
 
+import auth
 import results
 import ui
 from state import client
 from trustguard import reports
 from trustguard.schemas import CATEGORY_LABELS, ScamCategory
 
-ui.page_header("Scan history", "Every scan is stored here in its redacted, audit-safe form. Original messages are never stored.")
+auth.require()
+ui.page_header("Scan history", "Your scans, stored in their redacted, audit-safe form. Original messages are never stored, and "
+                                "other people can't see your scans.")
 c = client()
 
 with st.container(border=True):

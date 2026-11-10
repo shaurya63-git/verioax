@@ -33,7 +33,7 @@ GOVERNMENT_SUFFIXES = ("gov.in", "nic.in")
 class Entity:
     key: str
     name: str
-    kind: str                       # government | bank | payments | telecom | courier | ecommerce | utility | media | platform
+    kind: str                       # government | bank | payments | telecom | courier | ecommerce | utility | media | platform | brand
     aliases: tuple[str, ...]        # regex fragments that name the entity in a message
     domains: tuple[str, ...] = ()   # official domains (any subdomain of these is official)
     keywords: tuple[str, ...] = ()  # distinctive tokens for lookalike-domain detection
@@ -78,9 +78,19 @@ ENTITIES: tuple[Entity, ...] = (
            verify="RBI does not contact individuals about their accounts, prizes or funds. See rbi.org.in."),
     Entity("government_generic", "Government of India", "government",
            (r"govt\.?\s+of\s+india", r"government\s+of\s+india", r"\bministry\s+of\b", r"pradhan\s+mantri", r"\bPM[-\s]+(?:kisan|yojana|awas)",
-            r"सरकार", r"भारत\s+सरकार"),
+            r"\b(?:PM|modi)\s+(?:\w+\s+){0,3}yojana\b", r"\byojana\b", r"सरकार", r"भारत\s+सरकार", r"योजना"),
            (), ("govin", "gov-in", "gov"), fuzzy=False,
            verify="Government schemes and notices are published on official .gov.in websites and by PIB."),
+    # government schemes most often imitated by fake registration sites
+    Entity("pm_kisan", "PM-KISAN", "government", (r"\bPM[-\s]?KISAN\b", r"kisan\s+samman\s+nidhi"),
+           ("pmkisan.gov.in",), ("pmkisan",),
+           verify="Check PM-KISAN status only on pmkisan.gov.in. The scheme never charges a registration fee."),
+    Entity("ayushman", "Ayushman Bharat (PM-JAY)", "government", (r"ayushman\s+(?:bharat|card)", r"\bayushman\b", r"\bPM[-\s]?JAY\b"),
+           ("pmjay.gov.in", "nha.gov.in", "abdm.gov.in"), ("ayushman", "pmjay"),
+           verify="Check eligibility and apply only through beneficiary.nha.gov.in or a government hospital or CSC. It is free."),
+    Entity("pmay", "PM Awas Yojana", "government", (r"\bPMAY(?:-?[GU])?\b", r"awas\s+yojana", r"pradhan\s+mantri\s+awas"),
+           ("pmay-urban.gov.in", "pmayg.nic.in", "pmaymis.gov.in", "pmayg.dord.gov.in"), ("pmay", "awasyojana"),
+           verify="Apply only through the official PMAY portals (pmay-urban.gov.in, pmayg.nic.in) or your local body. There is no application fee."),
     # ------------------------------------------------------------------ banks
     Entity("sbi", "State Bank of India", "bank", (r"\bSBI\b", r"state\s+bank\s+of\s+india", r"\bYONO\b"),
            ("sbi.co.in", "onlinesbi.sbi", "sbi.bank.in", "sbicard.com", "sbilife.co.in", "sbimf.com", "sbigeneral.in"), ("sbi", "onlinesbi", "yonosbi", "yono"),
@@ -131,6 +141,27 @@ ENTITIES: tuple[Entity, ...] = (
     Entity("whatsapp", "WhatsApp", "platform", (r"whats\s?app",), ("whatsapp.com", "whatsapp.net", "wa.me"), ("whatsapp",)),
     Entity("kbc", "KBC (Kaun Banega Crorepati)", "media", (r"\bKBC\b", r"kaun\s+banega\s+crorepati"), ("sonyliv.com", "setindia.com"), ("kbc",), fuzzy=False,
            verify="There is no 'KBC lottery'. The show never picks winners by SMS or WhatsApp."),
+    # ------------------------------------------------------------------ brands used as bait in viral giveaway scams
+    Entity("amul", "Amul", "brand", (r"\bamul\b",), ("amul.com", "amul.coop"), ("amul",), fuzzy=False,
+           verify="Amul does not run 'anniversary gift' surveys on WhatsApp. Real offers are on amul.com."),
+    Entity("tata", "Tata Group", "brand", (r"\btata\s+(?:group|motors|sons|steel|power|play|neu|cliq|digital|capital)\b", r"\bratan\s+tata\b"),
+           ("tata.com", "tatamotors.com", "tatasteel.com", "tatapower.com", "tataplay.com", "tatacliq.com", "tataneu.com", "tcs.com",
+            "tatadigital.com", "tatacapital.com", "tataaig.com", "tatamotorsfinance.com"), ("tata",), fuzzy=False,
+           verify="Tata companies announce offers on their own websites (tata.com and the company sites), never through forwarded giveaways."),
+    Entity("dmart", "DMart (Avenue Supermarts)", "brand", (r"\bd-?\s?mart\b",), ("dmartindia.com", "dmart.in"), ("dmart",), fuzzy=False,
+           verify="DMart offers are only on dmart.in and in its stores."),
+    Entity("reliance", "Reliance / JioMart", "brand", (r"\breliance\b", r"\bjio\s?mart\b", r"\bmukesh\s+ambani\b"),
+           ("ril.com", "relianceretail.com", "jiomart.com", "reliancedigital.in", "reliancegeneral.co.in"), ("reliance", "jiomart"),
+           verify="Reliance offers are only on its own sites (ril.com, jiomart.com, reliancedigital.in)."),
+    Entity("meesho", "Meesho", "ecommerce", (r"\bmeesho\b",), ("meesho.com",), ("meesho",),
+           verify="Meesho has no 'lucky draw'. Check offers only in the Meesho app."),
+    Entity("myntra", "Myntra", "ecommerce", (r"\bmyntra\b",), ("myntra.com",), ("myntra",)),
+    Entity("swiggy", "Swiggy", "ecommerce", (r"\bswiggy\b",), ("swiggy.com", "swiggy.in"), ("swiggy",)),
+    Entity("zomato", "Zomato", "ecommerce", (r"\bzomato\b",), ("zomato.com",), ("zomato",)),
+    Entity("netflix", "Netflix", "brand", (r"\bnetflix\b",), ("netflix.com",), ("netflix",),
+           verify="Netflix never gives free premium accounts through links. Manage your plan in the Netflix app."),
+    Entity("hotstar", "JioHotstar", "brand", (r"\b(?:jio\s?)?hotstar\b",), ("hotstar.com", "jiohotstar.com"), ("hotstar",)),
+    Entity("cocacola", "Coca-Cola", "brand", (r"coca[\s-]?cola",), ("coca-cola.com", "coca-colaindia.com", "cocacola.com"), ("cocacola",), fuzzy=False),
 )
 
 ENTITY_BY_KEY = {e.key: e for e in ENTITIES}

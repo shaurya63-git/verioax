@@ -1,14 +1,16 @@
 import pandas as pd
 import streamlit as st
 
+import auth
 import charts
 import ui
 from state import client
 from trustguard import analytics, reports
 
-ui.page_header("Reports & analytics", "Trends across all your scans, the items that need a human look, and downloadable reports. "
+auth.require("moderator")
+ui.page_header("Reports & analytics", "Trends across everyone's scans, the items that need a human look, and downloadable reports. "
                                       "Reports contain placeholders and hashes, never raw personal data.")
-c = client()
+c = client().everyone          # platform-wide: every account's scans (counts and redacted results only)
 results = c.results(1000)
 if not results:
     ui.empty_state("Nothing to report yet", "Run a few scans (or load the sample scans from the Dashboard) and the analytics will appear here.")

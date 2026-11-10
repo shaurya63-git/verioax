@@ -136,11 +136,14 @@ def combine(ta: TextAnalysis, urls: list[URLAnalysis], text: str) -> list[RawFin
     secret_ask = {"credential_request", "credential_entry", "kyc_suspension", "upi_collect_trick"} & k
 
     first_bad = unofficial[0].url_id if unofficial else None
+    # links that belong to no known organisation at all (a giveaway that links to amazon.in is Amazon's own promotion)
+    untrusted = [r for r in unofficial if not r.official_entity]
+    first_untrusted = untrusted[0].url_id if untrusted else None
 
-    def add(key, cat, title, sev, strength, conf, explanation, action, evidence, pattern, link: bool = False):
+    def add(key, cat, title, sev, strength, conf, explanation, action, evidence, pattern, link: bool = False, url_id: str | None = None):
         # combination findings that are about a link are attached to it, so the link's own verdict reflects them
         out.append(RawFinding(key, cat, title, sev, strength, conf, explanation, action, "combination", evidence=evidence,
-                              url_id=first_bad if link else None))
+                              url_id=url_id or (first_bad if link else None)))
         ta.patterns.append(pattern)
 
     # C1 / C2 - claimed identity vs. where the link goes
@@ -207,6 +210,40 @@ def combine(ta: TextAnalysis, urls: list[URLAnalysis], text: str) -> list[RawFin
         add("card_details_on_link", C.PHISHING, "Asks you to enter card or banking details on a link", SV.HIGH, ST.STRONG, 0.85,
             "Banks never ask you to type card numbers, CVV or net-banking passwords on a page opened from a message.",
             "Don't enter anything.", ["card/banking details request", "unofficial link"], "Card details + link", link=True)
+    # C12 viral giveaway: a prize or free offer that must be forwarded to "unlock"
+    giveaway_keys = {"giveaway_lure", "prize_claim", "free_offer_lure", "celebrity_giveaway", "free_scheme_claim"} & k
+    forward_keys = {"share_to_unlock", "forward_demand"} & k
+    if giveaway_keys and forward_keys:
+        add("viral_giveaway", C.LOTTERY_PRIZE, "Giveaway that you must forward to claim", SV.HIGH, ST.STRONG, 0.9,
+            "Free gifts, recharges or prizes that you have to forward to friends or groups are viral scams. The reward never arrives; the forwarding "
+            "spreads the scam, and the final page collects your details, shows ads or pushes an app install.",
+            "Don't forward it and don't enter anything. Check offers in the brand's or department's official app or website.",
+            [f"offer: {', '.join(sorted(giveaway_keys))}", f"forwarding: {', '.join(sorted(forward_keys))}"], "Giveaway + forward demand",
+            url_id=first_untrusted)
+    # C13 prize / free offer / scheme + a link to a site that belongs to nobody known
+    if giveaway_keys and untrusted:
+        hosts = ", ".join(sorted({r.registrable_domain or r.host for r in untrusted}))
+        add("giveaway_link", C.LOTTERY_PRIZE, "Prize or free offer that sends you to an unknown site", SV.HIGH, ST.STRONG, 0.85,
+            f"The message offers something for free or a prize and links to {hosts}, which doesn't belong to any brand or government body it could "
+            "come from. Free-gift and fake-scheme sites ask for your phone number, Aadhaar or bank details, or a small 'delivery' or 'registration' fee.",
+            "Don't open the link. Look for the offer on the official website or app.", [f"offer: {', '.join(sorted(giveaway_keys))}", f"link domain: {hosts}"],
+            "Free offer + unknown link", url_id=first_untrusted)
+    # C14 prize + "contact our manager" on a personal number or chat (KBC-style lottery)
+    if "prize_claim" in k and ("callback_number" in k or chat_links):
+        add("prize_with_contact", C.LOTTERY_PRIZE, "Prize that asks you to contact someone", SV.HIGH, ST.STRONG, 0.88,
+            "A prize you never entered, claimed by calling or messaging a person, is the 'KBC lottery' pattern: the 'manager' then asks for a "
+            "processing fee or tax before releasing the money.",
+            "Don't call or reply. Block the number and report it on Chakshu (sancharsaathi.gov.in).", ["prize claim", "personal number or chat link"],
+            "Prize + personal contact")
+    # C15 unverified claim pushed for forwarding (hoax)
+    hoax_keys = {"viral_fear_hoax", "known_hoax_claim", "health_misinformation", "policy_change_rumour", "sensational_authority", "free_scheme_claim"} & k
+    spread_keys = {"forward_demand", "share_request", "share_to_unlock"} & k
+    if hoax_keys and spread_keys:
+        add("hoax_amplified", C.HOAX_MISINFORMATION, "Unverified claim pushed for forwarding", SV.MEDIUM, ST.STRONG, 0.85,
+            "The message makes a claim it gives no source for and asks you to spread it. That combination is the signature of viral misinformation, "
+            "whatever the topic.",
+            "Don't forward it. Check the claim on PIB Fact Check or the official source first.",
+            [f"claim: {', '.join(sorted(hoax_keys))}", f"spreading: {', '.join(sorted(spread_keys))}"], "Unsourced claim + forward request")
     # C11 official identity + personal callback number
     if strict and "callback_number" in k and not any(f.indicator == "official_from_personal_number" for f in ta.findings):
         sev, strength = (SV.HIGH, ST.STRONG) if ({"threat_of_consequence", "kyc_suspension"} & k) else (SV.MEDIUM, ST.WEAK)

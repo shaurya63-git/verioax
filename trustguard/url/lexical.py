@@ -96,6 +96,15 @@ def _tokens(p: ParsedURL) -> list[str]:
 
 _LURE_TOKENS = {"kyc", "update", "verify", "verification", "login", "signin", "secure", "reward", "refund", "challan", "pay", "payment",
                 "otp", "blocked", "unblock", "support", "help", "care", "bonus", "gift", "claim", "fine", "pending", "alert"}
+# Words of viral giveaway / free-offer scams ("amul-anniversary-gift", "jio-free-offer", "meesho-lucky-draw").
+GIVEAWAY_TOKENS = {"free", "gift", "gifts", "giveaway", "offer", "offers", "prize", "prizes", "winner", "winners", "win", "lucky", "luckydraw",
+                   "lottery", "jackpot", "reward", "rewards", "bonus", "cashback", "recharge", "anniversary", "spin", "claim", "lakh", "crore"}
+# Government-scheme words: real scheme portals live on gov.in / nic.in.
+SCHEME_TOKENS = ("yojana", "yojna")
+# Words of fake registration / status-check sites; next to a government name they make the domain an impersonation.
+ACTION_TOKENS = {"register", "registration", "apply", "form", "status", "beneficiary", "card", "portal", "list", "check", "online", "new"}
+# Brand keywords that also occur inside ordinary words ("datatables", "amulet"): matched only as whole domain tokens.
+AMBIGUOUS_KEYWORDS = {"tata", "amul"}
 
 
 def _lookalikes(p: ParsedURL, host_for_compare: str) -> list[tuple[B.Entity, str, str, int]]:
@@ -118,17 +127,20 @@ def _lookalikes(p: ParsedURL, host_for_compare: str) -> list[tuple[B.Entity, str
         for kw in e.keywords if hit is None else ():
             if kw in ("gov", "gov-in", "govin"):
                 continue                                            # handled by the government-lookalike check
-            found = kw in toks if len(kw) <= 3 else any(kw in lab for lab in labels)
+            found = kw in toks if (len(kw) <= 3 or kw in AMBIGUOUS_KEYWORDS) else any(kw in lab for lab in labels)
             if found:
                 hit = (e, "contains", f"uses '{kw}' in a domain that {e.name} does not own", 0)
                 break
             if not e.fuzzy or len(kw) < 6:
                 continue
             for t in toks:
-                if t == kw or len(t) < 5 or abs(len(t) - len(kw)) > 4:
+                if t == kw or len(t) < 5 or abs(len(t) - len(kw)) > 3:
                     continue
                 dist = DamerauLevenshtein.distance(t, kw)
-                if dist <= (1 if len(kw) < 8 else 2) or partial_ratio(kw, t) >= 87 or (len(kw) >= 8 and ratio(kw, t) >= 80):
+                near = dist <= (1 if len(kw) < 8 else 2) or (len(kw) >= 8 and ratio(kw, t) >= 80)
+                # a token *containing* a near-copy ("parivahann-pay"); never a shorter token that merely ends like the brand ("dmart" vs "bluedart")
+                near = near or (len(t) >= len(kw) and partial_ratio(kw, t) >= 90)
+                if near:
                     hit = (e, "typo", f"'{t}' is a near-copy of '{kw}'", dist)
                     break
             if hit:
@@ -180,20 +192,27 @@ def check(p: ParsedURL, *, claimed_entities: list[str] | None = None) -> Lexical
     looks = _lookalikes(p, host_cmp) if not (p.is_ip or official or registry) else []
     gov_like = (not registry and not p.is_ip and
                 (re.search(r"(?:^|[.-])(?:gov|govt)(?:[.-]|in\b|$)", ".".join(_tokens(p))) is not None or "gov-in" in p.host or "govin" in p.host))
+    toks = set(_tokens(p))
+    tld_risky = (p.suffix.rsplit(".", 1)[-1] in RISKY_TLDS) or p.suffix in FREE_HOSTING
+    lure = bool(_LURE_TOKENS & toks)
+    giveaway_words = sorted(GIVEAWAY_TOKENS & toks)
+    giveaway = bool(giveaway_words)
+    action = bool(ACTION_TOKENS & toks)
+    unofficial = not (official or registry or p.is_ip)
+    scheme_hit = (unofficial and any(s in tok for tok in toks for s in SCHEME_TOKENS)
+                  and not any(e.is_government and e.key != "government_generic" for e, *_ in looks))
     lookalike_of: list[str] = []
-    if looks or gov_like:
+    if looks or gov_like or scheme_hit:
         rows = []
-        tld_risky = (p.suffix.rsplit(".", 1)[-1] in RISKY_TLDS) or p.suffix in FREE_HOSTING
-        lure = bool(_LURE_TOKENS & set(_tokens(p)))
         for e, kind, detail, dist in looks:
             lookalike_of.append(e.key)
-            context = e.key in claimed or tld_risky or lure
+            context = e.key in claimed or tld_risky or lure or giveaway or (e.is_government and action)
             if kind == "deceptive_subdomain" or (kind == "typo" and dist <= 1):
                 strong = True
             elif kind == "typo":
                 strong = context
             else:                                                   # brand word inside an unofficial domain
-                strong = context and (e.kind in ("government", "bank", "payments") or e.key in claimed or (tld_risky and lure))
+                strong = context and (e.kind in ("government", "bank", "payments") or e.key in claimed or tld_risky or giveaway)
             title = {"typo": f"Lookalike of {e.name}", "deceptive_subdomain": f"Disguised as {e.name}",
                      "contains": f"Uses the name {e.name} in an unofficial domain"}[kind]
             cat = C.GOVERNMENT_IMPERSONATION if e.is_government else C.BANK_IMPERSONATION if e.kind == "bank" else C.BRAND_IMPERSONATION
@@ -204,11 +223,17 @@ def check(p: ParsedURL, *, claimed_entities: list[str] | None = None) -> Lexical
                 why.append(f"it uses a throwaway ending (.{p.suffix})")
             if lure:
                 why.append("it combines the name with words like 'kyc', 'pay' or 'verify'")
+            if giveaway:
+                why.append(f"it combines the name with giveaway words ({', '.join(giveaway_words[:3])})")
+            if e.is_government and action and not (lure or giveaway):
+                why.append("it looks like a registration or status-check page for a government scheme")
             explanation = (f"The domain {detail}. Scammers register names like this so the link looks official at a glance."
                            + (f" It is more suspicious because {', and '.join(why)}." if why else
                               " On its own this can also be a partner, reseller or fan site, so it is reported as a weaker signal."))
-            # a near-identical spelling, a disguised subdomain, or the name plus a lure word is critical; the bare name is high
-            critical = strong and (kind == "deceptive_subdomain" or (kind == "typo" and dist <= 1) or lure or e.key in claimed)
+            # critical: a near-identical spelling, a disguised subdomain, the name plus a phishing or giveaway word
+            # ("jio-free-offer", "amazon-gift"), or a government name plus a registration word ("pmkisan-registration")
+            critical = strong and (kind == "deceptive_subdomain" or (kind == "typo" and dist <= 1) or lure or giveaway or e.key in claimed
+                                   or (e.is_government and action))
             sev = SV.CRITICAL if critical else SV.HIGH if strong else SV.MEDIUM
             signals.append(URLSignal(f"lookalike_{kind}", cat, title, sev, ST.STRONG if strong else ST.WEAK,
                                      0.88 if strong else 0.7, explanation, e.verify or "Type the organisation's official address yourself instead.", [detail]))
@@ -219,22 +244,43 @@ def check(p: ParsedURL, *, claimed_entities: list[str] | None = None) -> Lexical
                                      f"'{p.registrable}' contains 'gov' but is not under .gov.in. Real Indian government sites end in .gov.in or .nic.in.",
                                      "Only trust government links that end in .gov.in or .nic.in.", [p.registrable]))
             rows.append(("Pretends to be a government domain", f"'{p.registrable}' imitates a .gov.in address"))
-        checks.append(URLCheck(key="lookalike", label="Domain similarity", status="fail" if any(s.strength == ST.STRONG for s in signals if s.key.startswith(("lookalike", "gov_"))) else "warn",
+        if scheme_hit:
+            lookalike_of.append("government_generic")
+            strong_s = tld_risky or lure or giveaway or bool({"pm", "pradhan", "mantri", "sarkari", "register", "registration", "apply", "form", "online"} & toks)
+            signals.append(URLSignal("scheme_lookalike", C.GOVERNMENT_IMPERSONATION, "Uses a government scheme name in an unofficial domain",
+                                     SV.CRITICAL if strong_s else SV.MEDIUM, ST.STRONG if strong_s else ST.WEAK, 0.85 if strong_s else 0.7,
+                                     f"'{p.registrable}' uses a scheme name ('yojana') but is not a government domain. Real scheme portals end in .gov.in or "
+                                     ".nic.in. Fake 'yojana registration' sites collect Aadhaar and bank details or charge a 'registration fee'.",
+                                     "Look the scheme up on myscheme.gov.in or india.gov.in and apply only there.", [p.registrable]))
+            rows.append(("Uses a government scheme name in an unofficial domain", f"'{p.registrable}' is not a .gov.in / .nic.in domain"))
+        checks.append(URLCheck(key="lookalike", label="Domain similarity",
+                               status="fail" if any(s.strength == ST.STRONG for s in signals if s.key.startswith(("lookalike", "gov_", "scheme_"))) else "warn",
                                summary=rows[0][0], explanation="; ".join(f"{t}: {d}" for t, d in rows)))
-    elif not (official or registry or p.is_ip) and len(_LURE_TOKENS & set(_tokens(p))) >= 2:
-        words = sorted(_LURE_TOKENS & set(_tokens(p)))
-        risky = (p.suffix.rsplit(".", 1)[-1] in RISKY_TLDS) or p.suffix in FREE_HOSTING
+    elif unofficial and len(_LURE_TOKENS & toks) >= 2:
+        words = sorted(_LURE_TOKENS & toks)
         checks.append(URLCheck(key="lookalike", label="Domain similarity", status="warn", summary=f"Phishing-style words in the domain ({', '.join(words)})",
                                explanation="The domain is built from words like 'secure', 'login' and 'verify' rather than a brand name - a common pattern for throwaway phishing sites."))
-        signals.append(URLSignal("lure_words_domain", C.PHISHING, "Phishing-style words in an unknown domain", SV.MEDIUM, ST.STRONG if risky else ST.WEAK,
-                                 0.8 if risky else 0.7, f"'{p.registrable}' combines {', '.join(words)}"
-                                 + (f" with a throwaway ending (.{p.suffix})" if risky else "") + ". Legitimate services use their brand name, not generic security words.",
+        signals.append(URLSignal("lure_words_domain", C.PHISHING, "Phishing-style words in an unknown domain", SV.MEDIUM, ST.STRONG if tld_risky else ST.WEAK,
+                                 0.8 if tld_risky else 0.7, f"'{p.registrable}' combines {', '.join(words)}"
+                                 + (f" with a throwaway ending (.{p.suffix})" if tld_risky else "") + ". Legitimate services use their brand name, not generic security words.",
                                  "Don't enter anything on this site.", [p.registrable]))
+    elif unofficial and (len(giveaway_words) >= 2 or (giveaway and tld_risky)):
+        strong_g = tld_risky
+        checks.append(URLCheck(key="lookalike", label="Domain similarity", status="fail" if strong_g else "warn",
+                               summary=f"Giveaway-style words in the domain ({', '.join(giveaway_words)})",
+                               explanation="The domain is built from words like 'free', 'gift', 'lucky' or 'offer' - the naming pattern of viral giveaway scam sites."))
+        signals.append(URLSignal("giveaway_words_domain", C.LOTTERY_PRIZE, "Giveaway-style words in an unknown domain",
+                                 SV.CRITICAL if (strong_g and len(giveaway_words) >= 2) else SV.MEDIUM, ST.STRONG if strong_g else ST.WEAK, 0.82 if strong_g else 0.7,
+                                 f"'{p.registrable}' is made of giveaway words ({', '.join(giveaway_words)})"
+                                 + (f" on a throwaway ending (.{p.suffix})" if tld_risky else "")
+                                 + ". Real brands run offers on their own websites, not on domains named after the prize.",
+                                 "Don't enter details or forward the link.", [p.registrable]))
     elif official or registry:
         checks.append(URLCheck(key="lookalike", label="Domain similarity", status="pass", summary="Matches a verified domain exactly"))
     else:
         checks.append(URLCheck(key="lookalike", label="Domain similarity", status="pass", summary="No resemblance to known brands found",
-                               explanation="Compared with the official domains of Indian government services, banks, payment apps and couriers."))
+                               explanation="Compared with the official domains of Indian government services and schemes, banks, payment apps, couriers and "
+                                           "brands often used as bait."))
 
     # ---- 4. homograph / punycode
     if p.is_punycode:
