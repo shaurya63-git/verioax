@@ -1,14 +1,15 @@
-# Verioax: REST API + web app as two containers.
+# Verioax: REST API + web app as two containers sharing one data volume (SQLite, fine for one machine).
 #   cp .env.example .env        (add any API keys you have; all optional)
 #   docker compose up --build
 #   web app: http://localhost:8501     API docs: http://localhost:8000/docs
 #
-# Both ports are bound to 127.0.0.1 only. If you ever publish the API beyond your own machine, set
-# TRUSTGUARD_API_TOKEN in .env first - the web app passes it to the API automatically.
+# Both ports are bound to 127.0.0.1 only. The API generates its access token on first start (api.token in the shared
+# volume) and the web app reads it from there. For several workers or machines, a shared PostgreSQL database and Redis
+# rate limits, use docker-compose.prod.yml (docs/deployment.md).
 services:
   api:
     build: .
-    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    command: ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]
     env_file: .env
     environment:
       TRUSTGUARD_DATA_DIR: /app/data/runtime
@@ -22,7 +23,10 @@ services:
     build: .
     env_file: .env
     environment:
-      TRUSTGUARD_API_URL: http://api:8000          # the web app becomes a thin client; history lives with the API
+      TRUSTGUARD_DATA_DIR: /app/data/runtime
+      TRUSTGUARD_API_URL: http://api:8000          # the web app becomes a thin client; scan history lives with the API
+    volumes:
+      - trustguard-data:/app/data/runtime          # accounts and the activity log live here; the API token is read from here
     depends_on:
       api:
         condition: service_healthy

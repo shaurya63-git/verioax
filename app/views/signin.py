@@ -52,7 +52,7 @@ with right:
                     st.error("Enter your username or email and your password.")
                 else:
                     try:
-                        user = store.authenticate(ident, password, role, pin=pin, session=auth.session_id(), client=auth.client_label())
+                        user = store.authenticate(ident, password, role, pin=pin)
                     except AccountError as exc:
                         st.error(str(exc), icon=":material/error:")
                     else:
@@ -79,12 +79,11 @@ with right:
                 made = st.form_submit_button("Create account", type="primary", width="stretch", icon=":material/person_add:")
             if made:
                 try:
-                    user = store.create_user(username, email, pw1, new_role, pin=new_pin, confirm=pw2, session=auth.session_id(),
-                                             client=auth.client_label())
+                    user = store.create_user(username, email, pw1, new_role, pin=new_pin, confirm=pw2)
                 except AccountError as exc:
                     st.error(str(exc), icon=":material/error:")
                 else:
-                    user = store.authenticate(username, pw1, new_role, pin=new_pin, session=auth.session_id(), client=auth.client_label())
+                    user = store.authenticate(username, pw1, new_role, pin=new_pin)
                     auth.sign_in(user)
                     st.rerun()
     st.caption("Your password is stored only as a salted scrypt hash. Five wrong attempts lock an account for 15 minutes.")

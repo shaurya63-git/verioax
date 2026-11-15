@@ -6,11 +6,17 @@ answer still within its TTL, or a downloaded feed), ``local`` (Verioax's own IOC
 
 Privacy: lookups send the URL to the provider. ``trustguard.url.analyzer`` strips query parameters that carry personal
 data before any lookup.
+
+Resilience (``resilience.py``): every outside call goes through the provider's guard - a shared connection pool, a cap
+on parallel calls, a circuit breaker and one retry for connection failures. A provider that is down or overloaded is
+reported as ``unavailable``; it is never treated as "not listed".
 """
 from __future__ import annotations
 
 import base64
 import re
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
@@ -20,6 +26,7 @@ import httpx
 from ..cache import TTLCache
 from ..schemas import FactCheckRef, IntelResult
 from ..url.parse import refang
+from .resilience import Resilience, call_with_retry, outcome_of
 
 USER_AGENT = "Verioax/0.1 (+https://github.com/)"
 
@@ -44,16 +51,21 @@ class _Base:
     attribution = ""
     ttl_s = 3600
 
-    def __init__(self, cache: TTLCache | None = None, transport: httpx.BaseTransport | None = None, timeout_s: float = 8.0):
+    def __init__(self, cache: TTLCache | None = None, transport: httpx.BaseTransport | None = None, timeout_s: float = 8.0,
+                 res: Resilience | None = None):
         self.cache = cache
         self.transport = transport
         self.timeout_s = timeout_s
+        self.res = res or Resilience()
 
     def configured(self) -> bool:
         return True
 
     def _client(self) -> httpx.Client:
-        return httpx.Client(timeout=self.timeout_s, transport=self.transport, headers={"User-Agent": USER_AGENT})
+        """The provider's shared connection pool (thread-safe; never closed per call)."""
+        return self.res.client((self.name, self.timeout_s, id(self.transport)), lambda: httpx.Client(
+            timeout=self.timeout_s, transport=self.transport, headers={"User-Agent": USER_AGENT},
+            limits=httpx.Limits(max_connections=self.res.max_parallel * 2, max_keepalive_connections=self.res.max_parallel)))
 
     def lookup(self, url: str) -> IntelResult:
         if not self.configured():
@@ -65,10 +77,11 @@ class _Base:
                 res = IntelResult.model_validate(hit)
                 res.mode = "cache"
                 return res
-        try:
-            res = self._lookup(url)
-        except (httpx.HTTPError, ValueError, KeyError) as exc:
-            return IntelResult(provider=self.name, status="error", mode="live", verdict=_err(exc), checked_at=_now(), attribution=self.attribution)
+        res, failed = guarded(self.res, self.name, self.timeout_s, lambda: self._lookup(url))
+        if failed is not None:
+            return failed.model_copy(update={"attribution": self.attribution})
+        if res.status == "error":
+            return res
         if self.cache is not None and res.status in ("listed", "suspicious", "clean", "not_found"):
             self.cache.set(key, res.model_dump(mode="json"), self.ttl_s)
         return res
@@ -77,11 +90,48 @@ class _Base:
         raise NotImplementedError
 
 
+SKIPPED = {"circuit_open": "Skipped for now: this service failed several times in a row. Verioax tries it again automatically "
+                           "within a minute. Not being checked here is not evidence that the link is safe.",
+           "busy": "Skipped: too many lookups to this service are already in progress. Not being checked here is not evidence "
+                   "that the link is safe."}
+
+
+def guarded(res: Resilience, name: str, timeout_s: float, fn):
+    """Run one outside call under the provider's guard. Returns (value, None), or (None, IntelResult) when the call was
+    skipped or failed - the IntelResult says which, without any URL, key or exception message in it."""
+    g = res.guard(name)
+    skipped = g.begin(wait_s=min(2.0, timeout_s))
+    if skipped:
+        return None, IntelResult(provider=name, status="unavailable", mode="none", verdict=SKIPPED[skipped], checked_at=_now())
+    t = time.perf_counter()
+    try:
+        value = call_with_retry(fn)
+    except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+        g.end(outcome_of(exc), time.perf_counter() - t, type(exc).__name__)
+        return None, IntelResult(provider=name, status="error", mode="live", verdict=_err(exc), checked_at=_now())
+    bad = isinstance(value, IntelResult) and value.status == "error"
+    g.end("error" if bad else "ok", time.perf_counter() - t, "bad_answer" if bad else "")
+    return value, None
+
+
+_URLISH = re.compile(r"(?i)\b(?:https?://|www\.)\S+|\b[\w-]+(?:\.[\w-]+)+(?:/\S*)?")
+_SECRETISH = re.compile(r"(?i)\b(key|token|app_key|apikey|auth)=\S+")
+
+
 def _err(exc: Exception) -> str:
+    """A short reason for the user and the logs: an HTTP status, or the kind of failure - never the request URL (which
+    holds the looked-up link and, for some providers, the API key) and never the server's own error text."""
     if isinstance(exc, httpx.HTTPStatusError):
         code = exc.response.status_code
         return {401: "API key rejected (401)", 403: "access denied (403)", 429: "rate limit reached (429)"}.get(code, f"HTTP {code}")
-    return (str(exc) or type(exc).__name__).splitlines()[0][:140]
+    if isinstance(exc, httpx.TimeoutException):
+        return "timed out"
+    if isinstance(exc, httpx.ConnectError):
+        return "could not connect"
+    if isinstance(exc, (ValueError, KeyError, TypeError)):
+        return "unexpected answer from the service"
+    msg = _SECRETISH.sub(r"\1=[redacted]", (str(exc) or type(exc).__name__).splitlines()[0])
+    return _URLISH.sub("[address]", msg)[:140]
 
 
 # ----------------------------------------------------------------------------------------------- Google Safe Browsing (v4 Lookup API)
@@ -102,10 +152,9 @@ class SafeBrowsing(_Base):
         body = {"client": {"clientId": "verioax", "clientVersion": "0.1.0"},
                 "threatInfo": {"threatTypes": self.THREATS, "platformTypes": ["ANY_PLATFORM"], "threatEntryTypes": ["URL"],
                                "threatEntries": [{"url": url}]}}
-        with self._client() as c:
-            r = c.post("https://safebrowsing.googleapis.com/v4/threatMatches:find", params={"key": self.api_key}, json=body)
-            r.raise_for_status()
-            data = r.json()
+        r = self._client().post("https://safebrowsing.googleapis.com/v4/threatMatches:find", params={"key": self.api_key}, json=body)
+        r.raise_for_status()
+        data = r.json()
         matches = data.get("matches", [])
         if matches:
             types = sorted({m.get("threatType", "") for m in matches})
@@ -130,8 +179,7 @@ class VirusTotal(_Base):
 
     def _lookup(self, url: str) -> IntelResult:
         url_id = base64.urlsafe_b64encode(url.encode()).decode().rstrip("=")
-        with self._client() as c:
-            r = c.get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers={"x-apikey": self.api_key})
+        r = self._client().get(f"https://www.virustotal.com/api/v3/urls/{url_id}", headers={"x-apikey": self.api_key})
         if r.status_code == 404:
             return IntelResult(provider=self.name, status="not_found", mode="live", verdict="Never analysed by VirusTotal", checked_at=_now(),
                                attribution=self.attribution)
@@ -158,10 +206,9 @@ class URLhaus(_Base):
         return bool(self.auth_key)
 
     def _lookup(self, url: str) -> IntelResult:
-        with self._client() as c:
-            r = c.post("https://urlhaus-api.abuse.ch/v1/url/", data={"url": url}, headers={"Auth-Key": self.auth_key})
-            r.raise_for_status()
-            data = r.json()
+        r = self._client().post("https://urlhaus-api.abuse.ch/v1/url/", data={"url": url}, headers={"Auth-Key": self.auth_key})
+        r.raise_for_status()
+        data = r.json()
         qs = data.get("query_status")
         if qs == "ok":
             tags = data.get("tags") or []
@@ -189,10 +236,10 @@ class PhishTank(_Base):
 
     def _lookup(self, url: str) -> IntelResult:
         ua = f"phishtank/{self.username}" if self.username else "phishtank/verioax"
-        with httpx.Client(timeout=self.timeout_s, transport=self.transport, headers={"User-Agent": ua}) as c:
-            r = c.post("https://checkurl.phishtank.com/checkurl/", data={"url": url, "format": "json", "app_key": self.app_key})
-            r.raise_for_status()
-            res = r.json().get("results", {})
+        r = self._client().post("https://checkurl.phishtank.com/checkurl/", data={"url": url, "format": "json", "app_key": self.app_key},
+                                headers={"User-Agent": ua})
+        r.raise_for_status()
+        res = r.json().get("results", {})
         if str(res.get("in_database")).lower() in ("true", "y", "1"):
             verified = str(res.get("verified")).lower() in ("true", "y", "1")
             valid = str(res.get("valid")).lower() in ("true", "y", "1")
@@ -214,6 +261,7 @@ class OpenPhish(_Base):
         self.feed_url, self.enabled = feed_url, enabled
         self._urls: set[str] | None = None
         self._hosts: set[str] | None = None
+        self._load_lock = threading.Lock()
 
     def configured(self) -> bool:
         return self.enabled
@@ -221,9 +269,8 @@ class OpenPhish(_Base):
     def _load(self) -> None:
         cached = self.cache.get("feed:openphish") if self.cache else None
         if cached is None:
-            with self._client() as c:
-                r = c.get(self.feed_url)
-                r.raise_for_status()
+            r = self._client().get(self.feed_url)
+            r.raise_for_status()
             cached = [line.strip() for line in r.text.splitlines() if line.strip().startswith("http")]
             if self.cache:
                 self.cache.set("feed:openphish", cached, 12 * 3600)          # the community feed updates every 12 hours
@@ -233,11 +280,12 @@ class OpenPhish(_Base):
     def lookup(self, url: str) -> IntelResult:
         if not self.configured():
             return IntelResult(provider=self.name, status="disabled", mode="none", attribution=self.attribution)
-        try:
-            if self._urls is None:
-                self._load()
-        except httpx.HTTPError as exc:
-            return IntelResult(provider=self.name, status="error", mode="cache", verdict=_err(exc), checked_at=_now())
+        if self._urls is None:
+            with self._load_lock:                       # one download, however many scans arrive at once
+                if self._urls is None:
+                    _, failed = guarded(self.res, self.name, self.timeout_s, self._load)
+                    if failed is not None:
+                        return failed.model_copy(update={"mode": "none" if failed.status == "unavailable" else "cache"})
         u = url.rstrip("/").lower()
         host = re.sub(r"^https?://", "", u).split("/")[0]
         if u in self._urls:
@@ -296,8 +344,10 @@ class FactCheck:
     name, label = "google_factcheck", "Google Fact Check Tools"
     signup_url = "https://developers.google.com/fact-check/tools/api"
 
-    def __init__(self, api_key: str | None, cache: TTLCache | None = None, transport: httpx.BaseTransport | None = None, timeout_s: float = 8.0):
+    def __init__(self, api_key: str | None, cache: TTLCache | None = None, transport: httpx.BaseTransport | None = None, timeout_s: float = 8.0,
+                 res: Resilience | None = None):
         self.api_key, self.cache, self.transport, self.timeout_s = api_key, cache, transport, timeout_s
+        self.res = res or Resilience()
 
     def configured(self) -> bool:
         return bool(self.api_key)
@@ -311,13 +361,15 @@ class FactCheck:
         key = f"factcheck:{language}:{query.lower()}"
         if self.cache is not None and (hit := self.cache.get(key)) is not None:
             return [FactCheckRef.model_validate(x) for x in hit]
-        try:
-            with httpx.Client(timeout=self.timeout_s, transport=self.transport) as c:
-                r = c.get("https://factchecktools.googleapis.com/v1alpha1/claims:search",
-                          params={"query": query, "languageCode": language, "pageSize": limit, "key": self.api_key})
-                r.raise_for_status()
-                data = r.json()
-        except (httpx.HTTPError, ValueError):
+        def call():
+            c = self.res.client((self.name, self.timeout_s, id(self.transport)),
+                                lambda: httpx.Client(timeout=self.timeout_s, transport=self.transport, headers={"User-Agent": USER_AGENT}))
+            r = c.get("https://factchecktools.googleapis.com/v1alpha1/claims:search",
+                      params={"query": query, "languageCode": language, "pageSize": limit, "key": self.api_key})
+            r.raise_for_status()
+            return r.json()
+        data, failed = guarded(self.res, self.name, self.timeout_s, call)
+        if failed is not None:
             return None
         refs: list[FactCheckRef] = []
         for cl in data.get("claims", []):

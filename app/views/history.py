@@ -8,6 +8,7 @@ import results
 import ui
 from state import client
 from trustguard import reports
+from trustguard.scam.types import TYPES as SCAM_TYPES
 from trustguard.schemas import CATEGORY_LABELS, ScamCategory
 
 auth.require()
@@ -35,7 +36,9 @@ if not rows:
     st.stop()
 
 df = pd.DataFrame([{"Scan ID": r["scan_id"], "Date / time": pd.to_datetime(r["created_at"]).strftime("%Y-%m-%d %H:%M"), "Input type": r["input_type"],
-                    "Risk": r["overall_risk"].title(), "Score": r["risk_score"], "Personal data": r["pii_count"], "Scam indicators": r["scam_count"],
+                    "Risk": f"{ui.T.RISK_ICON.get(r['overall_risk'], '')} {r['overall_risk'].title()}", "Score": r["risk_score"],
+                    "Scam type": SCAM_TYPES[r["scam_type"]].label if r.get("scam_type") in SCAM_TYPES else "",
+                    "Personal data": r["pii_count"], "Scam indicators": r["scam_count"],
                     "Status": {"clean": "redacted", "needs_review": "needs review", "blocked": "blocked", "n/a": "-"}.get(r["status"], r["status"]),
                     "Verdict": r["verdict"], "Demo": "yes" if r["demo"] else ""} for r in rows])
 event = st.dataframe(df, hide_index=True, width="stretch", on_select="rerun", selection_mode="single-row", key="h_table", height=320,

@@ -8,7 +8,21 @@ from .schemas import Recommendation, RiskLevel, Severity, URLReport
 RULES: list[tuple[str, int, str, str, set[str]]] = [
     ("no_secrets", 1, "Don't share OTPs, PINs, CVV or passwords",
      "No bank, government office or delivery company ever asks for them - not by SMS, call or link.",
-     {"credential_request", "credential_entry", "upi_collect_trick", "page_credential_form", "card_details_on_link"}),
+     {"credential_request", "credential_entry", "upi_collect_trick", "page_credential_form", "card_details_on_link", "bank_details_request"}),
+    ("no_seed_phrase", 1, "Never share your wallet recovery phrase",
+     "No wallet, exchange or support team ever asks for it, and anyone who has it can empty your wallet. Don't connect your wallet to sites from messages.",
+     {"seed_phrase_request", "wallet_connect_lure", "wallet_drainer_link"}),
+    ("no_crypto_send", 1, "Don't send crypto to 'receive more back'",
+     "Crypto transfers can't be reversed. A giveaway that asks you to send coins first - to 'verify' or to get double back - is always a scam.",
+     {"crypto_send_to_receive"}),
+    ("no_bonus_deposit", 1, "Don't register, deposit or pay to 'withdraw' a bonus",
+     "Fake casino, betting and crypto sites show a balance that can never be withdrawn. Any 'deposit', 'verification' or 'withdrawal fee' is the scam itself.",
+     {"crypto_casino_bonus", "cash_giveaway_signup", "gambling_crypto_promo", "no_deposit_bonus"}),
+    ("no_return", 1, "Don't 'return' money that was 'sent by mistake'",
+     "Check your balance in your bank's own app first. Never approve a collect request or enter your PIN to send money back.", {"accidental_transfer"}),
+    ("no_support_call", 1, "Don't call numbers from security alerts",
+     "Microsoft, Apple, Google and antivirus companies never put phone numbers in alerts. Close the message and run your own antivirus.",
+     {"tech_support_scare"}),
     ("no_pin_to_receive", 1, "Never enter your UPI PIN to receive money",
      "Entering the PIN always sends money out of your account. Decline the collect request.", {"upi_collect_trick"}),
     ("no_remote_apps", 1, "Don't install remote-access or unknown apps",
@@ -30,7 +44,13 @@ RULES: list[tuple[str, int, str, str, set[str]]] = [
     ("no_payment", 3, "Don't pay through links in messages",
      "If you think you owe money, open the official website or app yourself and check there.", {"payment_request", "impersonation_link_request"}),
     ("investment", 3, "Check investment offers with SEBI",
-     "Use only SEBI-registered brokers' own apps. Search the adviser or platform on sebi.gov.in.", {"investment_lure", "investment_with_contact"}),
+     "Use only SEBI-registered brokers' own apps. Search the adviser or platform on sebi.gov.in.", {"investment_lure", "investment_with_contact", "pump_hype"}),
+    ("verify_promoter", 2, "Check the announcement on the verified official account",
+     "Influencer, celebrity and brand accounts are impersonated for fake giveaways. Look for the same post on their verified profile or official website.",
+     {"self_launch_claim", "partnership_claim", "celebrity_giveaway"}),
+    ("refund_official", 2, "Refunds never need your PIN, OTP or bank details",
+     "Genuine refunds go back to the original payment method on their own. Check the refund status in the company's official app.",
+     {"refund_lure", "refund_with_request"}),
     ("dont_forward", 3, "Don't forward it until it's checked",
      "Look for the claim on the official website or a fact-checker such as PIB Fact Check (pib.gov.in/factcheck).",
      {"category:hoax_misinformation", "forward_demand"}),
@@ -48,8 +68,34 @@ LINK_ONLY: dict[str, tuple[str, str]] = {
 }
 
 
+APP_RULES: list[tuple[str, int, str, str, set[str]]] = [
+    ("app_dont_install", 1, "Don't install this app",
+     "Delete the file. Install apps only from the Google Play Store, and only the organisation's official app.", {"*"}),
+    ("app_if_installed", 1, "If you already installed it",
+     "Switch on airplane mode, remove it as device administrator (Settings > Security) if it is one, uninstall it, then call your bank to block "
+     "cards and UPI and change your banking passwords from a different phone. Report it on 1930 or cybercrime.gov.in.",
+     {"apk_otp_theft", "apk_banking_trojan", "apk_sms_access", "apk_accessibility", "apk_dropper", "apk_call_forwarding", "apk_impersonation"}),
+    ("app_official", 2, "Get the official app instead",
+     "Search for the organisation's own app in the Play Store and check the publisher name before installing.", {"apk_impersonation"}),
+    ("app_lookup", 3, "Look the file up yourself if you want a second opinion",
+     "Verioax doesn't upload apps anywhere. You can search the SHA-256 shown in the app report on VirusTotal - only the fingerprint, not the file.", {"*"}),
+]
+
+
 def build(findings: list[RawFinding], level: RiskLevel, urls: list[URLReport], claimed: list[str], pii_types: list[str],
-          id_of: dict[int, str], *, link_only: bool = False) -> list[Recommendation]:
+          id_of: dict[int, str], *, link_only: bool = False, app: bool = False) -> list[Recommendation]:
+    if app:
+        keys = {f.indicator for f in findings}
+        out = []
+        for rid, prio, title, detail, triggers in APP_RULES:
+            if (triggers == {"*"} and (rid != "app_dont_install" or level != RiskLevel.LOW)) or keys & triggers:
+                refs = [id_of[id(f)] for f in findings if f.indicator in triggers and id(f) in id_of][:6]
+                out.append(Recommendation(id=rid, priority=prio, title=title, detail=detail, triggered_by=refs or ["overall"]))
+        if level == RiskLevel.LOW:
+            out.insert(0, Recommendation(id="app_caution", priority=1, title="Prefer the Play Store version",
+                                         detail="Nothing high-risk was found, but apps sent as files aren't vetted. If the app is on the Play Store, install it from there.",
+                                         triggered_by=["overall"]))
+        return sorted(out, key=lambda r: r.priority)[:6]
     keys = {f.indicator for f in findings}
     cats = {f"category:{f.category.value}" for f in findings if f.severity not in (Severity.INFO,)}
     ents = {f"entity:{c}" for c in claimed}

@@ -23,9 +23,10 @@ for p in (str(ROOT), str(APP)):
 
 import streamlit as st  # noqa: E402
 
-st.set_page_config(page_title="Verioax", page_icon=str(APP / "static" / "logo_icon.svg"), layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Verioax", page_icon=str(APP / "static" / "logo_icon.svg"), layout="wide", initial_sidebar_state="auto")   # auto: collapsed on phones
 
 import auth  # noqa: E402
+import theme  # noqa: E402
 import ui  # noqa: E402
 from client import ClientError  # noqa: E402
 from state import accounts, client  # noqa: E402
@@ -77,16 +78,15 @@ with st.sidebar:
         prefs = c.get_prefs()
         status = c.intel_status()
         online = [s for s in status if s["configured"] and s["provider"] not in ("local_ioc", "google_factcheck")]
-        engine_row = ("#2DBA6B", "Engine ready" if c.kind == "local" else "Connected to API")
-        net_row = ("#8090A8", "Local mode: nothing is sent online") if prefs.local_mode else ("#4C8DF6", "Online checks on")
-        intel_row = ("#2DBA6B" if online else "#8090A8", f"{len(online)} online intel source(s)" if online else "Local indicator list only")
-        priv_row = ("#2DBA6B", "Redaction on; originals never stored") if prefs.auto_redact else ("#FAB219", "Automatic redaction is off")
+        engine_row = (theme.OK, "Engine ready" if c.kind == "local" else "Connected to API")
+        net_row = (theme.NEUTRAL, "Local mode: nothing is sent online") if prefs.local_mode else (theme.INFO, "Online checks on")
+        intel_row = (theme.OK if online else theme.NEUTRAL, f"{len(online)} online intel source(s)" if online else "Local indicator list only")
+        priv_row = (theme.OK, "Redaction on; originals never stored") if prefs.auto_redact else (theme.WARN, "Automatic redaction is off")
     except ClientError as exc:
-        engine_row, net_row, intel_row, priv_row = ("#E05252", "Backend not reachable"), ("#8090A8", str(exc)[:60]), ("#8090A8", "-"), ("#8090A8", "-")
+        engine_row, net_row, intel_row, priv_row = ((theme.BAD, "Backend not reachable"), (theme.NEUTRAL, str(exc)[:60]),
+                                                    (theme.NEUTRAL, "-"), (theme.NEUTRAL, "-"))
     rows = "".join(f"<div class='row'><span class='dot' style='background:{col}'></span><span>{ui.esc(txt)}</span></div>"
                    for col, txt in (engine_row, net_row, intel_row, priv_row))
     st.html(f"<div class='tg-status'><b>System status</b>{rows}{ui.founder_html()}</div>")
 
-if user is not None:
-    auth.log_page(user, nav.title)
 nav.run()

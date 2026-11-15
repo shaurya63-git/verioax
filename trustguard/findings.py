@@ -29,6 +29,12 @@ class RawFinding:
     evidence: list[str] = field(default_factory=list)
     url_id: str | None = None
     more_spans: list[tuple[int, int]] = field(default_factory=list)   # other places the same indicator matched (scored once)
+    # combination findings: the independent kinds of evidence they rest on ("reward", "destination", "pressure" ...).
+    # Three or more make a complete attack pattern (see trustguard.risk).
+    families: tuple[str, ...] = ()
+    # message excerpts to quote as evidence: (label, start, end) in the original text. The engine renders them from the
+    # redacted text, so a quote can never carry personal data into the result.
+    quotes: list[tuple[str, int, int]] = field(default_factory=list)
 
     def rank(self) -> tuple[int, int, float]:
         return (SEV_ORDER[self.severity], STR_ORDER[self.strength], self.confidence)

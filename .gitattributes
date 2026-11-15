@@ -5,3 +5,6 @@
 *.docx   binary
 *.woff2  binary
 *.sqlite binary
+
+# The evaluation sets are hashed and compared byte for byte (the held-out set is frozen): keep them LF everywhere.
+data/eval/*.jsonl text eol=lf

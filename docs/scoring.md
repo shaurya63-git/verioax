@@ -20,7 +20,8 @@ Every engine produces findings. A finding has these fields:
 | severity | info · low · medium · high · critical | How bad it is if the finding is true |
 | strength | weak · strong · confirmed | How strongly it points to fraud |
 | confidence | 0–1 | How reliable the detector is for this pattern |
-| category | one of 15 | e.g. government impersonation, phishing, hoax |
+| category | one of 17 | e.g. government impersonation, phishing, hoax, crypto & gambling, malicious app |
+| families | e.g. reward · destination · context · registration | the independent kinds of evidence a combination rule rests on (see 5b) |
 
 What each strength means:
 
@@ -30,7 +31,9 @@ What each strength means:
 - **Confirmed:** direct evidence. Examples: a match on a threat-intelligence blocklist or the local indicator list, or the
   live page asking for card number and CVV.
 
-`info` findings (a link was found, an amount was mentioned) give context and add no points.
+`info` findings give context and add no points. Examples: a link was found, an amount was mentioned, cryptocurrency or
+a casino is mentioned, a promo code is used. The result screen lists them separately under "Context noted - not counted
+in the score".
 
 ## 2. Points
 
@@ -60,6 +63,8 @@ confirmed high/critical finding**. They can therefore lower a borderline score, 
 | Sent from a registered government SMS header (`-G` suffix) and the message claims a government sender | −10 |
 | Sent from a transactional or service header that matches the bank it names | −8 |
 | Contains the standard "do not share your OTP" advisory | −5 |
+| Carries the terms, age (18+) or market-risk disclosures that genuine promotions include | −4 |
+| Points you to the official app, with no link, number or payment request | −4 |
 
 ## 3. Score and level
 
@@ -87,6 +92,7 @@ and the level always agree.
 | Confirmed critical finding | Level is **CRITICAL** |
 | Confirmed high, or strong critical, finding | Level is at least **HIGH** |
 | Any other strong or confirmed finding of medium severity or worse | Level is at least **MEDIUM**. A strong signal means honest senders practically never do this, so a short message can't score it down to LOW. |
+| A complete attack pattern: a strong or confirmed, high or critical combination finding built from **three or more independent evidence families** | Level is at least **HIGH**. This lets a message justify HIGH on its own, without any proof about the website. |
 | Only weak findings | Level is at most **MEDIUM**. Weak signals alone never make a HIGH verdict. |
 | The content hinges on a link that could not be verified, and nothing else raised the level | **INCONCLUSIVE** instead of LOW |
 
@@ -121,9 +127,75 @@ These rules look across engines and recognise a complete scam pattern rather tha
 | Prize + personal contact | A prize claimed by calling a mobile number or messaging on WhatsApp or Telegram (the "KBC lottery" pattern) | high · strong |
 | Unsourced claim + forward request | A hoax-type claim (fear hoax, debunked claim, health or policy rumour, fake scheme) combined with a request to forward it | medium · strong |
 
+Rules added in this version:
+
+| Rule | Fires when | Result |
+|---|---|---|
+| Crypto / casino bonus | A reward, plus at least two independent mechanics (offered to everyone · just for registering · instantly withdrawable or "no deposit" · the post will disappear · an unverified launch or partnership claim · an unusually large amount), plus a place to claim it (an unverified site, a chat, a promo code, a number), plus a crypto or gambling context | high · strong |
+| Cash for signing up | The same without the crypto or gambling context: a reward offered to everyone or for registering, plus a large amount, an instant withdrawal, scarcity or a persona claim, plus a place to claim it | high · strong |
+| Crypto or gambling bonus (weak) | A reward in a crypto or gambling context with a destination or one mechanic, not enough for the rules above | medium · weak |
+| Reward claimed on an outside site | One of the reward rules fired and the claim site is an unverified domain | low · weak (it explains the link; it is not proof the site is malicious) |
+| Wallet drainer | "Connect / validate / sync your wallet" or a seed-phrase request with an unknown site | high · strong |
+| Fake customer care | "<Brand> customer care / helpline" on a personal mobile number | high · strong |
+| Account warning + callback | "Your account is blocked / KYC pending" with a mobile number to call | high · strong |
+| Sent by mistake | A "money sent to you by mistake" story with a request to approve, return or share a code | high · strong |
+| Fake security alert | A virus / hacked-account scare with a support number to call | high · strong |
+| Refund + request | A refund that needs your card, UPI PIN, OTP or a link | high · strong |
+
+Disclosures change the bar: when a promotion carries the usual T&C, 18+ or market-risk text, the reward rules need three
+mechanics instead of two.
+
 **Fact-checks and warnings are not hoaxes.** When a message reads as a debunk ("FAKE", "PIB Fact Check", "beware of
 messages claiming…"), the hoax indicators that it quotes don't count against it. Prize and free-offer wording is also
-ignored in that case, as long as the message carries no link and no number to call.
+ignored in that case, as long as the message carries no link and no number to call. Wording inside quotation marks or
+reported speech ("they say 'you won Rs 25 lakh'") is treated the same way, and a link that is only quoted in a warning
+is not treated as one the message asks you to open.
+
+## 5b. Independent evidence families
+
+A combination finding records which **kinds** of evidence it rests on. For the crypto-casino rule these are: reward,
+destination, context and each mechanic. Two phrases that say the same thing ("free bonus" and "bonus for free") are one
+signal, not two. The complete-pattern floor in section 4 needs three families or more.
+
+The same idea keeps single ingredients harmless:
+
+- A crypto mention alone is a 0-point context note.
+- A casino advertisement alone is a 0-point context note.
+- A promo code alone is a 0-point context note.
+- A large amount alone is a weak signal.
+
+Only the combination of a reward, a mechanic that makes it implausible, and somewhere to hand over your details or money
+produces a strong finding.
+
+## 5c. Spelling tricks, amounts and languages
+
+Indicators are matched twice: on the text as written, and on a normalised copy. The normalised copy has:
+
+- zero-width characters removed
+- Unicode compatibility forms and lookalike letters (Cyrillic, Greek, full-width) folded
+- leetspeak undone (`fr33 b0nus`)
+- spaced-out letters joined (`c a s i n o`)
+- `nyxwin dot com` read as a domain
+
+Matches from the normalised copy are mapped back to the original text, so the highlighted fragment is what the person
+actually received. Normalisation can only add matches, never remove one.
+
+Amounts are parsed in rupees (Rs, ₹, lakh, crore, `rupaye`), dollars, euros, pounds and crypto tickers (BTC, ETH, USDT,
+...), including Indian digit grouping and `$4.200`-style separators. They are converted with rough fixed rates, only to
+decide whether a reward is "unusually large" (≥ ₹5,000 equivalent). The number is never shown as a precise conversion.
+
+Hindi (Devanagari) and Hinglish wordings exist for the reward, registration, withdrawal, scarcity and urgency
+indicators.
+
+## 5d. Scam type
+
+Next to the category of each finding, every scan gets one **scam type**: the pattern the findings add up to. Examples:
+crypto casino / betting bonus, crypto giveaway, wallet drainer, UPI payment fraud, OTP theft, fake customer support,
+fake e-challan, digital arrest, job scam, investment scam, bank phishing, malicious app.
+
+The type is chosen by ordered rules over the matched indicators, the claimed organisation and hints from the links. A
+link like `binance-bonus.top` suggests a crypto giveaway. The type is shown only when the level is MEDIUM or worse. It
+explains the verdict and never changes the score.
 
 ## 5a. Page content
 
@@ -185,6 +257,54 @@ Confidence:
 - The link was not visited, giving −0.10.
 
 0.50 + 0.24 + 0.07 − 0.10 = **0.71, Medium**. The verdict is clear, but no live evidence was available.
+
+## 8. Worked example: a crypto-casino bonus post
+
+The message from the original bug report, in local mode:
+
+> I am pleased to announce the launch of my own cryptocurrency casino linked to our recent launch of the Vyro project!
+> To celebrate this big event, I am giving away $5,600 to everyone who registers, and you can withdraw the bonus
+> immediately. How to claim your reward: Go to: nyxwin.com · Enter the special promo code: BET · Receive your $5,600 bonus.
+> This post will be deleted an hour after publication so that only the fastest people will find out about the bonus! …
+
+Before this version it rested on three phrases: HIGH 54 by a hair, MEDIUM under conservative sensitivity. Any rewording
+fell to LOW or INCONCLUSIVE. Now:
+
+| Finding | Category | Severity · strength · conf. | Points |
+|---|---|---|---|
+| Crypto / casino bonus pattern (reward + everyone + registration + instant withdrawal + scarcity + persona + large amount + casino/crypto context + promo code / unverified site) | crypto & gambling | high · strong · 0.90 | 25.20 |
+| Claims the money can be withdrawn instantly | crypto & gambling | low · weak · 0.75 | 2.25 → ×½ = 1.12 |
+| Prize, lottery or reward claim ("claim your reward") | lottery & prize | medium · strong · 0.80 | 11.20 |
+| Unusually large reward for doing almost nothing ($5,600) | lottery & prize | medium · weak · 0.80 | 5.60 → ×½ = 2.80 |
+| Money, crypto or bonus credit given away | lottery & prize | medium · weak · 0.75 | 5.25 → ×¼ = 1.31 |
+| Reward promised to everyone · reward just for registering | lottery & prize | low · weak · 0.75 | 0.28 + 0.14 |
+| The post will soon disappear ("only the fastest people") | social engineering | medium · weak · 0.80 | 5.60 |
+| First-person "I launched my own" announcement | social engineering | low · weak · 0.70 | 2.10 → ×½ = 1.05 |
+| Unverified partnership ("linked to … the Vyro project") | claim to verify | low · weak · 0.65 | 1.95 |
+| Unencrypted link · reward claimed on an outside site | suspicious link | low · weak | 2.40 + 1.05 |
+| Mentions cryptocurrency · mentions a casino · promo code · link in the message | (context) | info | 0 |
+
+```
+raw   = 54.11
+score = round(100 × (1 − e^(−54.11/45))) = 70   →  HIGH (≥ 50; also HIGH 67 under conservative)
+```
+
+The verdict text says that the link (nyxwin.com) could not be verified, and that the HIGH verdict rests on what the
+message says and asks for, not on proof that the site is malicious. Confidence is 0.63, Medium: two strong findings and
+no live evidence.
+
+The same rules catch the post with:
+
+- another amount (₹50,000, 2 ETH, 500 USDT)
+- another site or code
+- Hinglish ("register karo aur turant withdraw karo") or Hindi wording
+- spelling tricks (`fr33 b0nus`, `n y x w i n dot com`)
+
+Each single ingredient alone stays low:
+
+- a casino advert with 18+ and T&C
+- a crypto exchange's referral offer with risk disclosures
+- a news article about crypto scams
 
 ## Why not let an AI model decide?
 

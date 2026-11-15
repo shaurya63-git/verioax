@@ -34,6 +34,27 @@ class Settings(BaseSettings):
     # 6-digit PIN that moderators enter at sign-up and sign-in. Kept out of the code on purpose: the repository is public.
     moderator_pin: SecretStr | None = _key("VERIOAX_MODERATOR_PIN", "moderator_pin")
 
+    # shared infrastructure for multi-worker / multi-server deployments (both optional; local development needs neither)
+    # postgresql://user:password@host:5432/verioax - accounts, activity, feedback, scan history and preferences in one shared database
+    database_url: SecretStr | None = _key("VERIOAX_DATABASE_URL", "DATABASE_URL", "database_url")
+    database_pool_size: int = Field(default=10, ge=1, le=100, validation_alias=AliasChoices("VERIOAX_DATABASE_POOL_SIZE", "database_pool_size"))
+    # redis://host:6379/0 - rate-limit counters shared by every worker (without it each process counts on its own)
+    redis_url: SecretStr | None = _key("VERIOAX_REDIS_URL", "REDIS_URL", "redis_url")
+    # key for the personal-data fingerprints (HMAC). Set the same value on every instance; otherwise data_dir/secret.key is used.
+    secret_key: SecretStr | None = _key("VERIOAX_SECRET_KEY", "secret_key")
+
+    # request limits ("<count>/<seconds>"), per client
+    rate_limit_scan: str = Field(default="30/60", validation_alias=AliasChoices("VERIOAX_RATE_LIMIT_SCAN", "rate_limit_scan"))
+    rate_limit_file: str = Field(default="10/60", validation_alias=AliasChoices("VERIOAX_RATE_LIMIT_FILE", "rate_limit_file"))
+    rate_limit_api: str = Field(default="300/60", validation_alias=AliasChoices("VERIOAX_RATE_LIMIT_API", "rate_limit_api"))
+    rate_limit_ui_scan: str = Field(default="20/60", validation_alias=AliasChoices("VERIOAX_RATE_LIMIT_UI_SCAN", "rate_limit_ui_scan"))
+    # reverse proxies whose X-Forwarded-For header may be trusted (comma-separated IPs or CIDR ranges); empty = trust none
+    trusted_proxies: str = Field(default="", validation_alias=AliasChoices("VERIOAX_TRUSTED_PROXIES", "trusted_proxies"))
+    # bounded work: scans running at once per process, file scans (PDF/OCR/APK) at once, and how long a request may queue
+    max_concurrent_scans: int = Field(default=8, ge=1, le=256, validation_alias=AliasChoices("VERIOAX_MAX_CONCURRENT_SCANS", "max_concurrent_scans"))
+    max_concurrent_file_scans: int = Field(default=2, ge=1, le=64, validation_alias=AliasChoices("VERIOAX_MAX_CONCURRENT_FILE_SCANS", "max_concurrent_file_scans"))
+    scan_queue_timeout_s: float = Field(default=20.0, ge=0.5, le=300, validation_alias=AliasChoices("VERIOAX_SCAN_QUEUE_TIMEOUT_S", "scan_queue_timeout_s"))
+
     # live URL inspection limits (SSRF-guarded fetcher)
     fetch_timeout_s: float = Field(default=8.0, validation_alias=AliasChoices("TRUSTGUARD_FETCH_TIMEOUT_S", "fetch_timeout_s"))
     max_redirects: int = Field(default=5, validation_alias=AliasChoices("TRUSTGUARD_MAX_REDIRECTS", "max_redirects"))
@@ -105,13 +126,86 @@ def get_settings() -> Settings:
     return Settings()
 
 
+def api_token_path(settings: Settings) -> Path:
+    return Path(settings.data_dir) / "api.token"
+
+
+def resolve_api_token(settings: Settings | None = None, *, create: bool = False) -> str | None:
+    """The API's bearer token: TRUSTGUARD_API_TOKEN, or the token file in the data directory.
+
+    With ``create`` (the API at start-up) a random token is written there when none is configured, so the API is never
+    reachable from other machines without a token. The web app reads the same file when both share the data folder
+    (as in docker-compose); the token itself is never printed or logged."""
+    import os
+    import secrets
+    import time
+    s = settings or get_settings()
+    if s.api_token is not None:
+        return s.api_token.get_secret_value()
+    path = api_token_path(s)
+
+    def read() -> str | None:
+        try:
+            tok = path.read_text(encoding="utf-8").strip()
+            return tok if len(tok) >= 32 else None
+        except OSError:
+            return None
+
+    if (tok := read()) or not create:
+        return tok
+    tok = secrets.token_urlsafe(32)
+    for _ in range(40):
+        # O_EXCL: when several API workers start together exactly one creates the file and the others read it, so all
+        # of them (and the web app) end up with the same token
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            if (existing := read()) is not None:
+                return existing
+            time.sleep(0.05)                        # another worker is still writing it
+            continue
+        except OSError:
+            return tok                              # read-only data directory: the token lives for this process only
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(tok)
+        return tok
+    # a stale, unreadable or truncated file: replace it atomically
+    tmp = path.with_name(f".api.token.{os.getpid()}")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as f:
+        f.write(tok)
+    os.replace(tmp, path)
+    return tok
+
+
 def preferences_path(settings: Settings | None = None) -> Path:
     s = settings or get_settings()
     return Path(s.data_dir) / "preferences.json"
 
 
+def _shared_db(settings: Settings):
+    """The shared PostgreSQL database when one is configured: preferences then live there, so every server uses the same ones."""
+    if settings.database_url is None:
+        return None
+    from .db import open_database
+    db = open_database(settings, "accounts.sqlite")
+    db.execute("CREATE TABLE IF NOT EXISTS app_settings (key TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT)")
+    return db
+
+
 def load_preferences(settings: Settings | None = None) -> Preferences:
-    p = preferences_path(settings)
+    s = settings or get_settings()
+    db = _shared_db(s)
+    if db is not None:
+        row = db.one("SELECT value FROM app_settings WHERE key = 'preferences'")
+        if row:
+            try:
+                return Preferences.model_validate_json(row["value"])
+            except ValueError:
+                pass
+        return Preferences()
+    p = preferences_path(s)
     if p.exists():
         try:
             return Preferences.model_validate_json(p.read_text(encoding="utf-8"))
@@ -120,8 +214,18 @@ def load_preferences(settings: Settings | None = None) -> Preferences:
     return Preferences()
 
 
-def save_preferences(prefs: Preferences, settings: Settings | None = None) -> Path:
-    p = preferences_path(settings)
+def save_preferences(prefs: Preferences, settings: Settings | None = None) -> Path | str:
+    s = settings or get_settings()
+    db = _shared_db(s)
+    if db is not None:
+        from datetime import datetime, timezone
+        db.execute("INSERT INTO app_settings (key, value, updated_at) VALUES ('preferences', ?, ?) "
+                   "ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+                   (prefs.model_dump_json(), datetime.now(timezone.utc).isoformat(timespec="seconds")))
+        return "database"
+    p = preferences_path(s)
     p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(prefs.model_dump_json(indent=2), encoding="utf-8")
+    tmp = p.with_suffix(".json.tmp")
+    tmp.write_text(prefs.model_dump_json(indent=2), encoding="utf-8")
+    tmp.replace(p)                               # atomic: a concurrent reader never sees half a file
     return p

@@ -161,6 +161,21 @@ ENTITIES: tuple[Entity, ...] = (
     Entity("netflix", "Netflix", "brand", (r"\bnetflix\b",), ("netflix.com",), ("netflix",),
            verify="Netflix never gives free premium accounts through links. Manage your plan in the Netflix app."),
     Entity("hotstar", "JioHotstar", "brand", (r"\b(?:jio\s?)?hotstar\b",), ("hotstar.com", "jiohotstar.com"), ("hotstar",)),
+    # ------------------------------------------------------------------ crypto exchanges and wallets (impersonated in wallet-theft scams)
+    Entity("binance", "Binance", "crypto", (r"\bbinance\b",), ("binance.com", "binance.us"), ("binance",),
+           verify="Check your account only in the official Binance app; Binance support never asks for your password, 2FA codes or recovery phrase."),
+    Entity("coinbase", "Coinbase", "crypto", (r"\bcoinbase\b",), ("coinbase.com",), ("coinbase",),
+           verify="Use only the official Coinbase app or coinbase.com, typed yourself."),
+    Entity("metamask", "MetaMask", "crypto", (r"\bmeta\s?mask\b",), ("metamask.io",), ("metamask",),
+           verify="MetaMask never asks for your Secret Recovery Phrase and has no 'wallet verification' process."),
+    Entity("trust_wallet", "Trust Wallet", "crypto", (r"\btrust\s?wallet\b",), ("trustwallet.com",), ("trustwallet",),
+           verify="Trust Wallet support never asks for your recovery phrase; use only the official app."),
+    Entity("wazirx", "WazirX", "crypto", (r"\bwazirx\b",), ("wazirx.com",), ("wazirx",), fuzzy=False),
+    Entity("coindcx", "CoinDCX", "crypto", (r"\bcoin\s?dcx\b",), ("coindcx.com",), ("coindcx",), fuzzy=False),
+    Entity("coinswitch", "CoinSwitch", "crypto", (r"\bcoin\s?switch\b",), ("coinswitch.co",), ("coinswitch",), fuzzy=False),
+    Entity("microsoft", "Microsoft", "brand", (r"\bmicrosoft\b", r"\bwindows\s+(?:defender|security)\b"),
+           ("microsoft.com", "live.com", "outlook.com", "office.com", "microsoftonline.com", "windows.com"), ("microsoft",),
+           verify="Microsoft never shows phone numbers in security pop-ups or messages; don't call them."),
     Entity("cocacola", "Coca-Cola", "brand", (r"coca[\s-]?cola",), ("coca-cola.com", "coca-colaindia.com", "cocacola.com"), ("cocacola",), fuzzy=False),
 )
 

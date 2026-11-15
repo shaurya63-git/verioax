@@ -40,28 +40,44 @@ def findings_csv(r: ScanResult) -> str:
     return buf.getvalue()
 
 
+STRENGTH_LABEL = {"confirmed": "Confirmed indicator", "strong": "Strong pattern", "weak": "Weak signal"}
+DETECTED_BY_LABEL = {"local": "Verioax rules (on this device/server)", "live_check": "Live check of the page", "live_intel": "Threat intelligence (live)",
+                     "cached_intel": "Threat intelligence (cached)", "local_list": "Verioax indicator list"}
+CHECK_STATUS_LABEL = {"checked": "checked", "partly_checked": "partly checked (threat intelligence only)", "not_checked": "not checked live",
+                      "not_visited": "not visited", "unreachable": "could not be reached"}
+
+
 def to_markdown(r: ScanResult) -> str:
     L: list[str] = [f"# Verioax report - {r.scan_id}", "",
                     f"**{r.overall_risk.value} RISK** ({'privacy exposure' if r.risk_basis == 'privacy' else 'threat'} score {r.risk_score}/100, "
                     f"confidence {r.confidence_label.lower()} {r.model_confidence:.2f})", "",
-                    f"**{r.verdict_title}** - {r.verdict_summary}", "",
-                    f"- Scanned: {r.created_at:%Y-%m-%d %H:%M} UTC - input: {r.input_type.value} ({r.source_name}) - mode: {r.mode.value}",
+                    f"**{r.verdict_title}** - {r.verdict_summary}", ""]
+    if r.scam_type_label:
+        L += [f"**Scam type:** {r.scam_type_label} - {r.scam_type_summary or ''}", ""]
+    L += [f"- Scanned: {r.created_at:%Y-%m-%d %H:%M} UTC - input: {r.input_type.value} ({r.source_name}) - mode: {r.mode.value}",
                     f"- Modules: {', '.join(r.processing.modules)} - network mode: {r.processing.network_mode} - engine {r.processing.engine_version} "
                     f"- config {r.processing.config_hash}" + (" - DEMO DATA" if r.processing.demo else ""), ""]
     if r.recommended_actions:
         L += ["## Recommended actions", ""] + [f"{i}. **{a.title}** - {a.detail}" for i, a in enumerate(r.recommended_actions, 1)] + [""]
     sf = [f for f in r.scam_findings if f.severity != Severity.INFO]
     if sf:
-        L += ["## Threat findings", "", "| ID | Category | Finding | Severity | Strength | Conf. | Evidence (redacted) |", "|---|---|---|---|---|---|---|"]
-        L += [f"| {f.id} | {CATEGORY_LABELS[f.category]} | {f.title} | {f.severity.value} | {f.strength.value} | {f.confidence:.2f} | "
-              f"{_md(f.matched_text)} |" for f in sf]
+        L += ["## Threat findings", "", "Confirmed = a malicious indicator confirmed by a source; strong / weak = a suspicious pattern, not proof.", "",
+              "| ID | Category | Finding | Severity | Strength | Detected by | Conf. | Evidence (redacted) |", "|---|---|---|---|---|---|---|---|"]
+        L += [f"| {f.id} | {CATEGORY_LABELS[f.category]} | {f.title} | {f.severity.value} | {STRENGTH_LABEL[f.strength.value]} | "
+              f"{DETECTED_BY_LABEL.get(f.detected_by, f.detected_by)} | {f.confidence:.2f} | {_md(f.matched_text)} |" for f in sf]
         L += [""]
+        ctx = [f for f in r.scam_findings if f.severity == Severity.INFO]
+        if ctx:
+            L += ["Context noted (not counted in the score): " + "; ".join(f.title for f in ctx), ""]
     for u in r.urls:
         L += [f"## Link {u.url_id}: `{u.defanged}`", "", f"Assessment: **{u.final_assessment.value}** - {u.assessment_summary}", "",
+              f"Link check: **{CHECK_STATUS_LABEL.get(u.check_status, u.check_status)}** - {u.check_note}", "",
               "| Check | Status | Result |", "|---|---|---|"]
         L += [f"| {c.label} | {c.status} | {_md(c.summary)} |" for c in u.checks] + [""]
         if u.visit_note:
             L += [f"_{u.visit_note}_", ""]
+    if r.app is not None:
+        L += app_markdown(r.app)
     if r.scam and r.scam.claims:
         L += ["## Claims that need verification", ""] + [f"- \"{_md(c.text)}\" - {c.how_to_verify}" +
                                                          ("".join(f" [{x.publisher}: {x.rating}]({x.url})" for x in c.fact_checks)) for c in r.scam.claims] + [""]
@@ -80,6 +96,36 @@ def to_markdown(r: ScanResult) -> str:
         L += ["## Processing notes", ""] + [f"- {w}" for w in r.warnings] + [""]
     L += ["---", "No raw personal data appears in this report; values are replaced by placeholders and hashes.", "", f"_{DISCLAIMER}_"]
     return "\n".join(L)
+
+
+def app_facts(a) -> list[list[str]]:
+    certs = "; ".join(f"{c.source}: {c.subject}" + (" (Android test key)" if c.test_key else " (debug certificate)" if c.debug else "")
+                      for c in a.certificates[:3]) or "none found (unsigned)"
+    return [["App name", a.label or "-"], ["Package", a.package or "-"], ["Version", f"{a.version_name or '-'} ({a.version_code or '-'})"],
+            ["Android versions", f"min API {a.min_sdk or '-'}, target API {a.target_sdk or '-'}"],
+            ["Size / SHA-256", f"{a.size_bytes:,} bytes / {a.sha256}"], ["Presents itself as", a.claimed_entity or "-"],
+            ["Signing", f"{', '.join(a.signature_schemes) or 'no signature scheme found'}; certificates: {certs}. "
+                        "Certificates were read, not cryptographically verified."],
+            ["Components", ", ".join(f"{v} {k}" for k, v in a.component_counts.items()) or "-"],
+            ["Native libraries / packers", f"{', '.join(a.native_libs[:8]) or 'none'} / {', '.join(a.packers) or 'none'}"]]
+
+
+def app_markdown(a) -> list[str]:
+    L = ["## Android app (static analysis)", "", "Nothing was installed or run, and links found inside the app were not visited.", "",
+         "| Field | Value |", "|---|---|"] + [f"| {k} | {_md(v)} |" for k, v in app_facts(a)] + [""]
+    if a.permissions:
+        L += ["### Permissions", "", "| Permission | Risk | What it allows |", "|---|---|---|"]
+        L += [f"| {x.short} | {x.risk} | {_md(x.meaning)} |" for x in a.permissions] + [""]
+    comps = [c for c in a.components if c.exported or c.role]
+    if comps:
+        L += ["### Notable components", "", "| Kind | Name | Exported | Role |", "|---|---|---|---|"]
+        L += [f"| {c.kind} | `{_md(c.name)}` | {'yes' if c.exported else 'no'} | {_md(c.role)} |" for c in comps[:30]] + [""]
+    for title, items in (("Capabilities seen in the code", a.capabilities), ("Links inside the app (defanged, not visited)", a.urls),
+                         ("Domains", a.domains), ("Embedded code", a.embedded_code), ("Archive problems", a.archive_issues),
+                         ("Limits of this analysis", a.limitations)):
+        if items:
+            L += [f"### {title}", ""] + [f"- `{x}`" if title.startswith(("Links", "Domains")) else f"- {x}" for x in items] + [""]
+    return L
 
 
 def _md(s: str) -> str:
@@ -138,7 +184,10 @@ def to_pdf(r: ScanResult) -> bytes:
                     [P(r.verdict_title, size=10, b=True, color="#ffffff"), ""]], colWidths=[70 * mm, None])
     banner.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor(col)), ("SPAN", (0, 1), (1, 1)),
                                 ("LEFTPADDING", (0, 0), (-1, -1), 8), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
-    story += [banner, Spacer(1, 5), P(r.verdict_summary, size=9), Spacer(1, 8)]
+    story += [banner, Spacer(1, 5), P(r.verdict_summary, size=9)]
+    if r.scam_type_label:
+        story += [Spacer(1, 3), Paragraph(f"<b>Scam type:</b> {_safe(r.scam_type_label, uni)} - {_safe(r.scam_type_summary or '', uni)}", S(size=8.5))]
+    story += [Spacer(1, 8)]
 
     def table(head, rows, widths):
         data = [[P(h, size=8, b=True) for h in head]] + [[P(str(c), size=8) for c in row] for row in rows]
@@ -154,13 +203,29 @@ def to_pdf(r: ScanResult) -> bytes:
     sf = [f for f in r.scam_findings if f.severity != Severity.INFO]
     if sf:
         story += [P("Threat findings", size=11, b=True), Spacer(1, 3),
-                  table(["ID", "Finding", "Category", "Severity / strength", "Evidence (redacted)"],
-                        [[f.id, f.title, CATEGORY_LABELS[f.category], f"{f.severity.value} / {f.strength.value} ({f.confidence:.2f})", f.matched_text[:90]]
-                         for f in sf], [12 * mm, 52 * mm, 32 * mm, 30 * mm, None]), Spacer(1, 8)]
+                  table(["ID", "Finding", "Category", "Severity / strength / source", "Evidence (redacted)"],
+                        [[f.id, f.title, CATEGORY_LABELS[f.category],
+                          f"{f.severity.value} / {STRENGTH_LABEL[f.strength.value].lower()} / {DETECTED_BY_LABEL.get(f.detected_by, f.detected_by).lower()}",
+                          f.matched_text[:90]] for f in sf], [12 * mm, 48 * mm, 28 * mm, 38 * mm, None]),
+                  P("Confirmed = a malicious indicator confirmed by a source; strong / weak = a suspicious pattern, not proof.", size=7.5, color="#5b6576"),
+                  Spacer(1, 8)]
     for u in r.urls:
         story += [P(f"Link {u.url_id}: {u.defanged}", size=10, b=True), P(f"{u.final_assessment.value} - {u.assessment_summary}", size=8.5),
+                  P(f"Link check: {CHECK_STATUS_LABEL.get(u.check_status, u.check_status)} - {u.check_note}", size=8, color="#5b6576"),
                   Spacer(1, 3), table(["Check", "Status", "Result"], [[c.label, c.status, c.summary] for c in u.checks], [40 * mm, 20 * mm, None]),
                   Spacer(1, 8)]
+    if r.app is not None:
+        a = r.app
+        story += [P("Android app (static analysis - nothing was installed or run)", size=11, b=True), Spacer(1, 3),
+                  table(["Field", "Value"], app_facts(a), [42 * mm, None]), Spacer(1, 4)]
+        if a.permissions:
+            story += [table(["Permission", "Risk", "What it allows"], [[x.short, x.risk, x.meaning] for x in a.permissions[:40]],
+                            [48 * mm, 16 * mm, None]), Spacer(1, 4)]
+        for title, items in (("Capabilities seen in the code", a.capabilities), ("Links inside the app (defanged, not visited)", a.urls[:15]),
+                             ("Archive problems", a.archive_issues), ("Limits of this analysis", a.limitations)):
+            if items:
+                story += [P(title, size=9, b=True)] + [P(f"- {x}", size=8) for x in items] + [Spacer(1, 3)]
+        story += [Spacer(1, 6)]
     if r.pii:
         p = r.pii
         story += [P("Personal data (PII)", size=11, b=True),

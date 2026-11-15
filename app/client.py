@@ -12,13 +12,15 @@ under that account and history is filtered to it. Moderator pages that need plat
 """
 from __future__ import annotations
 
+import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
 
-from trustguard.config import Preferences, get_settings, save_preferences
+from trustguard.config import Preferences, get_settings, resolve_api_token, save_preferences
 from trustguard.schemas import AnalysisMode, ScanResult
 
 
@@ -56,10 +58,10 @@ class LocalClient:
         self.engine = TrustGuardEngine()
 
     def _wrap(self, fn, *a, **k) -> ClientScan:
-        from trustguard.engine import InputError
+        from trustguard.engine import BusyError, InputError
         try:
             out = fn(*a, **k)
-        except InputError as exc:
+        except (InputError, BusyError) as exc:
             raise ClientError(str(exc)) from None
         return ClientScan(out.result, out.restricted.original_text)
 
@@ -97,6 +99,15 @@ class LocalClient:
     def test_provider(self, name):
         return self.engine.hub.test(name)
 
+    def ops_stats(self) -> dict:
+        """Service health for moderators: counts, latencies and provider circuit states - no content."""
+        from trustguard.metrics import REGISTRY
+        snap = REGISTRY.snapshot()
+        snap["providers"] = self.engine.hub.health()
+        db = self.engine.store.db if self.engine.store else None
+        snap["database"] = {"dialect": db.dialect if db else "none", "ping_ms": db.ping() if db else None}
+        return snap
+
     def get_prefs(self):
         return self.engine.prefs
 
@@ -131,20 +142,36 @@ def _report_bytes(r: ScanResult, fmt: str, reports) -> bytes:
 
 
 class APIClient:
+    """Scans carry an Idempotency-Key and are retried once when the API is unreachable or busy (HTTP 502/503/504):
+    a retry of a scan that did complete returns the first result instead of storing a second scan."""
     kind = "api"
+    RETRY_STATUS = (502, 503, 504)
 
-    def __init__(self, base_url: str, token: str | None = None):
+    def __init__(self, base_url: str, token: str | None = None, transport: httpx.BaseTransport | None = None):
         self.base = base_url.rstrip("/")
         self.headers = {"Authorization": f"Bearer {token}"} if token else {}
-        self.http = httpx.Client(base_url=self.base, headers=self.headers, timeout=90)
+        self.http = httpx.Client(base_url=self.base, headers=self.headers, timeout=90, transport=transport)
 
-    def _call(self, method: str, path: str, owner_id: int | None = None, **kw):
+    def _call(self, method: str, path: str, owner_id: int | None = None, *, retry: bool = False, **kw):
+        headers = dict(kw.pop("headers", {}))
         if owner_id is not None:
-            kw["headers"] = {**kw.get("headers", {}), "X-Verioax-Owner": str(owner_id)}
-        try:
-            r = self.http.request(method, path, **kw)
-        except httpx.HTTPError as exc:
-            raise ClientError(f"The Verioax API at {self.base} is not reachable ({type(exc).__name__}).") from None
+            headers["X-Verioax-Owner"] = str(owner_id)
+        if retry:
+            headers.setdefault("Idempotency-Key", uuid.uuid4().hex)
+        for attempt in (1, 2):
+            try:
+                r = self.http.request(method, path, headers=headers, **kw)
+            except (httpx.ConnectError, httpx.RemoteProtocolError) as exc:
+                if retry and attempt == 1:
+                    time.sleep(0.5)
+                    continue
+                raise ClientError(f"The Verioax API at {self.base} is not reachable ({type(exc).__name__}).") from None
+            except httpx.HTTPError as exc:
+                raise ClientError(f"The Verioax API at {self.base} is not reachable ({type(exc).__name__}).") from None
+            if retry and attempt == 1 and r.status_code in self.RETRY_STATUS:
+                time.sleep(min(_retry_after(r), 3.0))
+                continue
+            break
         if r.status_code >= 400:
             try:
                 detail = r.json().get("detail")
@@ -156,15 +183,16 @@ class APIClient:
         return r
 
     def scan_message(self, text, sender, mode, demo=False, owner_id=None):
-        r = self._call("POST", "/v1/scan/message", owner_id, json={"text": text, "sender": sender or None, "mode": mode.value, "demo": demo})
+        r = self._call("POST", "/v1/scan/message", owner_id, retry=True,
+                       json={"text": text, "sender": sender or None, "mode": mode.value, "demo": demo})
         return ClientScan(ScanResult.model_validate(r.json()), text)
 
     def scan_url(self, url, owner_id=None):
-        r = self._call("POST", "/v1/scan/url", owner_id, json={"url": url})
+        r = self._call("POST", "/v1/scan/url", owner_id, retry=True, json={"url": url})
         return ClientScan(ScanResult.model_validate(r.json()), url)
 
     def scan_file(self, name, data, mode, owner_id=None):
-        r = self._call("POST", "/v1/scan/file", owner_id, files={"file": (name, data)}, data={"mode": mode.value})
+        r = self._call("POST", "/v1/scan/file", owner_id, retry=True, files={"file": (name, data)}, data={"mode": mode.value})
         return ClientScan(ScanResult.model_validate(r.json()), None)       # the extracted text stays on the server
 
     def list_scans(self, owner_id=None, **filters):
@@ -200,6 +228,9 @@ class APIClient:
     def test_provider(self, name):
         return self._call("POST", f"/v1/intel/test/{name}").json()
 
+    def ops_stats(self) -> dict:
+        return self._call("GET", "/v1/ops/stats").json()
+
     def get_prefs(self):
         return Preferences.model_validate(self._call("GET", "/v1/preferences").json())
 
@@ -212,8 +243,9 @@ class ScopedClient:
     and every finished scan is reported to ``on_scan`` (the activity log). Intel status, preferences and the indicator list
     are shared and pass straight through."""
 
-    def __init__(self, base, owner_id: int | None, on_scan: Callable[[ScanResult], None] | None = None):
-        self._base, self.owner_id, self._on_scan = base, owner_id, on_scan
+    def __init__(self, base, owner_id: int | None, on_scan: Callable[[ScanResult], None] | None = None,
+                 throttle: Callable[[], None] | None = None):
+        self._base, self.owner_id, self._on_scan, self._throttle = base, owner_id, on_scan, throttle
         self.kind = base.kind
 
     @property
@@ -226,13 +258,22 @@ class ScopedClient:
             self._on_scan(scan.result)
         return scan
 
+    def _check_rate(self) -> None:
+        """Per-account scan limit in the web app (raises ClientError with a wait time)."""
+        if self._throttle is not None:
+            self._throttle()
+
     def scan_message(self, text, sender, mode, demo=False):
+        if not demo:                                    # the dashboard's sample loader is exempt
+            self._check_rate()
         return self._done(self._base.scan_message(text, sender, mode, demo=demo, owner_id=self.owner_id))
 
     def scan_url(self, url):
+        self._check_rate()
         return self._done(self._base.scan_url(url, owner_id=self.owner_id))
 
     def scan_file(self, name, data, mode):
+        self._check_rate()
         return self._done(self._base.scan_file(name, data, mode, owner_id=self.owner_id))
 
     def list_scans(self, **filters):
@@ -257,8 +298,16 @@ class ScopedClient:
         return getattr(self._base, name)
 
 
+def _retry_after(r: httpx.Response) -> float:
+    try:
+        return max(0.2, float(r.headers.get("Retry-After", "1")))
+    except ValueError:
+        return 1.0
+
+
 def make_client() -> Client:
     s = get_settings()
     if s.api_url:
-        return APIClient(s.api_url, s.api_token.get_secret_value() if s.api_token else None)
+        # TRUSTGUARD_API_TOKEN, or the token file the API wrote into the shared data folder
+        return APIClient(s.api_url, resolve_api_token(s))
     return LocalClient()

@@ -65,6 +65,8 @@ class ScamCategory(str, Enum):
     BRAND_IMPERSONATION = "brand_impersonation"
     HOAX_MISINFORMATION = "hoax_misinformation"
     CLAIM_VERIFICATION = "claim_verification"
+    CRYPTO_GAMBLING = "crypto_gambling"        # crypto giveaways, wallet drainers, casino / betting bonus lures
+    MALICIOUS_APP = "malicious_app"            # capabilities found by static analysis of an Android app (APK)
 
 
 CATEGORY_LABELS: dict[ScamCategory, str] = {
@@ -83,6 +85,8 @@ CATEGORY_LABELS: dict[ScamCategory, str] = {
     ScamCategory.BRAND_IMPERSONATION: "Brand impersonation",
     ScamCategory.HOAX_MISINFORMATION: "Hoax / misinformation",
     ScamCategory.CLAIM_VERIFICATION: "Claim needs verification",
+    ScamCategory.CRYPTO_GAMBLING: "Crypto / gambling scam",
+    ScamCategory.MALICIOUS_APP: "Malicious app capability",
 }
 
 CheckStatus = Literal["pass", "warn", "fail", "info", "unavailable"]
@@ -165,6 +169,9 @@ class ScamFinding(BaseModel):
     evidence: list[str] = Field(default_factory=list)
     recommended_action: str = ""
     source: Literal["message", "sender", "url", "page", "intel", "combination", "file"] = "message"
+    # how the evidence was obtained: local analysis of the text/link, a live visit of the page, an online threat-intelligence
+    # answer (fresh or cached) or Verioax's own indicator list
+    detected_by: Literal["local", "live_check", "live_intel", "cached_intel", "local_list"] = "local"
 
 
 class FactCheckRef(BaseModel):
@@ -293,11 +300,74 @@ class URLReport(BaseModel):
     page: PageInspection | None = None
     visited: bool = False
     visit_note: str = ""
+    # was the link actually checked? checked = visited live (and/or answered by online intel); partly_checked = online intel
+    # only; not_checked = live checks off; not_visited = deliberately skipped (privacy); unreachable = the visit failed
+    check_status: Literal["checked", "partly_checked", "not_checked", "not_visited", "unreachable"] = "not_checked"
+    check_note: str = ""
     final_assessment: RiskLevel = RiskLevel.INCONCLUSIVE
     assessment_summary: str = ""
     indicator_ids: list[str] = Field(default_factory=list)        # ScamFinding ids raised from this URL
     start: int | None = None                                       # position in the message (original text)
     end: int | None = None
+
+
+# --------------------------------------------------------------------------------------------- Android apps (static analysis)
+class AppPermission(BaseModel):
+    name: str                                 # android.permission.RECEIVE_SMS
+    short: str                                # RECEIVE_SMS
+    risk: Literal["high", "medium", "low", "normal"]
+    meaning: str                              # what it lets the app do, in plain words
+
+
+class AppComponent(BaseModel):
+    kind: str                                 # activity | activity-alias | service | receiver | provider
+    name: str
+    exported: bool
+    permission: str | None = None
+    actions: list[str] = Field(default_factory=list)
+    role: str = ""                            # "accessibility service", "SMS receiver (priority 999)", "device admin" ...
+
+
+class AppCertificate(BaseModel):
+    source: str                               # v1 | v2 | v3
+    subject: str
+    issuer: str
+    sha256: str
+    not_before: str | None = None
+    not_after: str | None = None
+    key: str = ""
+    self_signed: bool = True
+    debug: bool = False
+    test_key: bool = False
+
+
+class AppReport(BaseModel):
+    """Static analysis of an APK. Nothing was installed or run; URLs found in the code were not visited."""
+    sha256: str
+    size_bytes: int
+    package: str = ""
+    label: str = ""
+    version_name: str = ""
+    version_code: str = ""
+    min_sdk: int | None = None
+    target_sdk: int | None = None
+    permissions: list[AppPermission] = Field(default_factory=list)
+    declared_permissions: list[str] = Field(default_factory=list)
+    components: list[AppComponent] = Field(default_factory=list)      # exported or security-relevant components
+    component_counts: dict[str, int] = Field(default_factory=dict)
+    certificates: list[AppCertificate] = Field(default_factory=list)
+    signature_schemes: list[str] = Field(default_factory=list)
+    signature_verified: bool = False          # static triage reads the certificate; it does not verify the signature
+    capabilities: list[str] = Field(default_factory=list)            # plain-language capabilities seen in the code
+    native_libs: list[str] = Field(default_factory=list)
+    packers: list[str] = Field(default_factory=list)
+    embedded_code: list[str] = Field(default_factory=list)
+    urls: list[str] = Field(default_factory=list)                    # defanged, never visited
+    domains: list[str] = Field(default_factory=list)                 # defanged
+    archive_issues: list[str] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    claimed_entity: str | None = None
+    parsed: bool = True                       # False: the manifest could not be read (verdict INCONCLUSIVE)
 
 
 # --------------------------------------------------------------------------------------------- unified result
@@ -341,6 +411,9 @@ class ScanResult(BaseModel):
     confidence_label: Literal["Low", "Medium", "High"]
     verdict_title: str
     verdict_summary: str
+    scam_type: str | None = None              # detected scheme, e.g. "crypto_casino" (trustguard.scam.types); None when LOW
+    scam_type_label: str | None = None        # "Crypto casino / betting bonus scam"
+    scam_type_summary: str | None = None      # one or two sentences on how this scheme works
     evidence_summary: dict[str, int] = Field(default_factory=dict)  # confirmed / strong / weak counts
     pii: PIIReport | None = None
     scam: ScamReport | None = None
@@ -351,6 +424,7 @@ class ScanResult(BaseModel):
     redacted_text: str | None = None
     text_length: int = 0
     ai_explanation: str | None = None          # optional local-LLM summary of the findings (never decides the verdict)
+    app: AppReport | None = None               # set for Android app (APK) scans
     processing: ProcessingMetadata
 
     # ---- convenience views used by the dashboard and history (derived, not stored separately)
@@ -363,7 +437,7 @@ class ScanResult(BaseModel):
         return self.pii.findings if self.pii else []
 
     def counts(self) -> dict[str, int]:
-        sf = self.scam_findings
+        sf = [f for f in self.scam_findings if f.severity != Severity.INFO]          # context notes are not signals
         return {
             "scam_indicators": sum(f.source not in ("url", "page", "intel") for f in sf),
             "url_indicators": sum(f.source in ("url", "page", "intel") for f in sf),

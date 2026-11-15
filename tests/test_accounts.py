@@ -17,6 +17,11 @@ from trustguard.storage import ScanStore
 PIN = "424242"          # test PIN; the real one lives in .env, never in the code
 
 
+def store_epoch():
+    from datetime import datetime, timezone
+    return datetime(2000, 1, 1, tzinfo=timezone.utc)
+
+
 def redact(text: str) -> str:
     from trustguard.pii import analyze_pii
     return analyze_pii(text)[1].redacted_text
@@ -65,7 +70,8 @@ def test_moderator_signup_needs_the_right_pin(store):
     with pytest.raises(AccountError, match="PIN is incorrect"):
         store.create_user("mod1", "mod1@example.com", "moderate this 7", "moderator", pin="000000")
     assert store.count("moderator") == 0
-    assert store.activity(events=["pin_failed"])[0]["detail"] == "moderator sign-up"
+    assert store.activity() == []                                   # a wrong PIN is not an activity entry ...
+    assert store._security_count("signup_pin_failed", store_epoch()) == 1   # ... it is an internal security counter
     m = moderator(store)
     assert m.is_moderator
 
@@ -73,7 +79,7 @@ def test_moderator_signup_needs_the_right_pin(store):
 def test_moderator_signup_is_disabled_without_a_configured_pin(tmp_path):
     s = AccountStore(tmp_path / "a.sqlite", moderator_pin=None)
     with pytest.raises(AccountError, match="VERIOAX_MODERATOR_PIN"):
-        s.create_user("mod1", "mod1@example.com", "moderate this 7", "moderator", pin="256701")
+        s.create_user("mod1", "mod1@example.com", "moderate this 7", "moderator", pin="135790")
     assert not AccountStore(tmp_path / "b.sqlite", moderator_pin="12345").pin_configured     # must be exactly 6 digits
 
 
@@ -168,13 +174,14 @@ def test_traffic_and_account_overview(store):
     u = consumer(store)
     moderator(store)
     store.authenticate("ravi", "correct horse 42", "consumer")
-    store.log("scan", user=u, detail="message - HIGH - VX-20261110-AAAAAA")
+    store.record_scan(u, scan_id="VX-20261110-AAAAAA", input_type="message", verdict="HIGH")
+    store.add_feedback(u, "feedback", "Works well", "The link report explained everything clearly.")
     tr = store.traffic(days=7)
     today = max(tr["series"])
-    assert tr["users"] == 2 and tr["consumers"] == 1 and tr["moderators"] == 1
-    assert tr["series"][today]["signups"] == 2 and tr["series"][today]["logins"] == 1 and tr["series"][today]["scans"] == 1
+    assert tr["users"] == 2 and tr["consumers"] == 1 and tr["moderators"] == 1 and tr["new_this_week"] == 2
+    assert tr["series"][today] == {"logins": 1, "scans": 1, "feedback": 1, "active_users": 1}
     row = next(r for r in store.list_users() if r["username"] == "ravi")
-    assert row["scans"] == 1 and row["state"] in ("online", "active")
+    assert row["scans"] == 1 and row["feedback"] == 1 and row["state"] in ("online", "active")
 
 
 # ----------------------------------------------------------------------------------------------- per-account scan history
@@ -211,3 +218,98 @@ def test_signing_out_ends_online_status(store):
     assert not store.get(u.id).online() and store.get(u.id).account_state() == "active"
     store.authenticate("ravi", "correct horse 42", "consumer")
     assert store.get(u.id).online()
+
+
+# ----------------------------------------------------------------------------------------------- the moderators' activity log
+def events(store):
+    return [r["event"] for r in store.activity(limit=1000)]
+
+
+def test_activity_log_holds_only_logins_scans_and_feedback(store):
+    u, m = consumer(store), moderator(store)
+    assert events(store) == []                                       # creating accounts is not activity
+    store.authenticate("ravi", "correct horse 42", "consumer")
+    assert events(store) == ["login"]                                # one successful sign-in -> exactly one entry
+    with pytest.raises(AccountError):
+        store.authenticate("ravi", "wrong password 1", "consumer")    # failed sign-in -> nothing
+    with pytest.raises(AccountError):
+        store.authenticate("nobody", "whatever 123", "consumer")
+    with pytest.raises(AccountError):
+        store.authenticate("mod1", "moderate this 7", "moderator", pin="000000")   # wrong PIN -> nothing
+    store.signed_out(u)                                              # sign-out -> nothing
+    store.touch(u)
+    store.change_password(u, "correct horse 42", "brand new pass 9", "brand new pass 9")
+    store.set_status(m, u.id, "suspended")                           # moderator actions -> nothing
+    store.set_status(m, u.id, "active")
+    store.unlock(m, u.id)
+    assert events(store) == ["login"]
+    assert store.record_scan(u, scan_id="VX-20261115-ABCDEF", input_type="url", verdict="HIGH")
+    fid = store.add_feedback(u, "complaint", "Rated wrongly", "This link was rated high but it is my bank's real site.")
+    store.update_feedback(m, fid, status="resolved", reply="Thanks, we'll look at it.")   # reply -> nothing
+    assert sorted(events(store)) == ["feedback", "login", "scan"]
+    with pytest.raises(ValueError):
+        store._record("page", u)                                     # no other event type can be written at all
+
+
+def test_a_scan_is_logged_once_however_often_it_is_reported(store):
+    u = consumer(store)
+    for _ in range(3):                                               # reruns, repeated callbacks, retried requests
+        store.record_scan(u, scan_id="VX-20261115-0A1B2C", input_type="message", verdict="CRITICAL")
+    assert events(store) == ["scan"]
+    row = store.activity()[0]
+    assert (row["kind"], row["verdict"], row["ref"]) == ("message", "CRITICAL", "VX-20261115-0A1B2C")
+
+
+def test_one_feedback_submission_is_one_entry(store):
+    u = consumer(store)
+    fid = store.add_feedback(u, "wrong_result", "Missed a scam", "A fake casino bonus post was rated low.")
+    rows = store.activity()
+    assert [r["event"] for r in rows] == ["feedback"] and rows[0]["kind"] == "wrong_result" and rows[0]["ref"] == f"FB-{fid:06d}"
+
+
+def test_activity_entries_never_hold_message_contents(engine, store):
+    u = consumer(store)
+    secret = "Ravi Kumar 9876543210 nyxwin.com bonus code ZZTOP"
+    r = engine.scan_message(f"Hi {secret}, claim your prize at nyxwin.com", owner_id=u.id).result
+    store.record_scan(u, scan_id=r.scan_id, input_type=r.input_type.value, verdict=r.overall_risk.value)
+    store.add_feedback(u, "feedback", "About my scan", f"The message said {secret}.", scan_id=r.scan_id)
+    dump = repr(store.activity()) + repr(store.db.query("SELECT * FROM activity"))
+    for token in ("Ravi", "9876543210", "nyxwin", "ZZTOP", "claim your prize"):
+        assert token not in dump
+
+
+def test_lockout_still_works_without_activity_entries(store):
+    consumer(store)
+    for _ in range(MAX_FAILED - 1):
+        with pytest.raises(AccountError, match="Incorrect"):
+            store.authenticate("ravi", "wrong password 1", "consumer")
+    with pytest.raises(AccountError, match="locked"):
+        store.authenticate("ravi", "wrong password 1", "consumer")
+    assert store.find("ravi").locked() and events(store) == []
+
+
+def test_older_databases_keep_their_history_but_hide_retired_events(tmp_path):
+    path = tmp_path / "accounts.sqlite"
+    db = sqlite3.connect(path)
+    db.executescript("""
+        CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            role TEXT NOT NULL, password_hash TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'active', created_at TEXT NOT NULL, last_login_at TEXT,
+            last_seen_at TEXT, failed_attempts INTEGER NOT NULL DEFAULT 0, locked_until TEXT, login_count INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE activity (id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, user_id INTEGER, username TEXT, role TEXT, event TEXT NOT NULL,
+            detail TEXT, session TEXT, client TEXT);
+        CREATE TABLE feedback (id INTEGER PRIMARY KEY AUTOINCREMENT, created_at TEXT NOT NULL, user_id INTEGER NOT NULL, username TEXT NOT NULL,
+            kind TEXT NOT NULL, subject TEXT NOT NULL, message TEXT NOT NULL, scan_id TEXT, status TEXT NOT NULL DEFAULT 'new', reply TEXT,
+            replied_by TEXT, updated_at TEXT);
+        INSERT INTO activity (at, user_id, username, role, event, detail) VALUES ('2026-11-10T10:00:00+00:00', 1, 'ravi', 'consumer', 'login', '');
+        INSERT INTO activity (at, user_id, username, role, event, detail) VALUES ('2026-11-10T10:00:05+00:00', 1, 'ravi', 'consumer', 'page', 'Dashboard');
+        INSERT INTO activity (at, user_id, username, role, event, detail) VALUES ('2026-11-10T10:01:00+00:00', 1, 'ravi', 'consumer', 'login_failed', '');
+    """)
+    db.commit()
+    db.close()
+    store = AccountStore(path, moderator_pin=PIN)
+    assert [r["event"] for r in store.activity()] == ["login"]       # retired events are no longer shown ...
+    assert store.legacy_activity_count() == 2                        # ... but nothing was deleted by the upgrade
+    backups = list(tmp_path.glob("accounts.sqlite.pre-accounts-v1-*.bak"))
+    assert len(backups) == 1                                         # and a copy was taken before migrating
+    assert {"kind", "verdict", "ref"} <= store.db.query("SELECT * FROM activity LIMIT 1")[0].keys()
+    assert store.prune_legacy_activity() == 2 and store.legacy_activity_count() == 0

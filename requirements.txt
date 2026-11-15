@@ -15,6 +15,7 @@ pypdf>=4.0
 python-docx>=1.1
 reportlab>=4.0
 pandas>=2.0
+cryptography>=42          # reads APK signing certificates (static analysis only)
 
 # web app
 streamlit>=1.65
@@ -29,9 +30,16 @@ python-multipart>=0.0.9
 pytesseract>=0.3.10
 pillow>=10.0
 
+# shared database and rate limits for several workers (optional at run time: only used when
+# VERIOAX_DATABASE_URL / VERIOAX_REDIS_URL are set)
+psycopg[binary]>=3.1
+psycopg-pool>=3.2
+redis>=5.0
+
 # development
 pytest>=8.0
 ruff>=0.5
+# load tests: pip install locust   (see docs/load-testing.md)
 
 # optional: better name detection with spaCy (then run: python -m spacy download en_core_web_sm)
 # spacy>=3.7

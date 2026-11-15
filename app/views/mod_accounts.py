@@ -79,7 +79,7 @@ with st.container(border=True):
     events = store.activity(user_id=target["id"], limit=25)
     if events:
         st.dataframe(pd.DataFrame([{"When": ui.local_time(e["at"], "%d %b, %H:%M"), "Event": EVENT_LABELS.get(e["event"], e["event"]),
-                                    "Details": e["detail"] or "", "Browser": e["client"] or ""} for e in events]),
+                                    "Details": e["detail"] or ""} for e in events]),
                      hide_index=True, width="stretch")
     else:
         st.caption("No activity recorded for this account.")

@@ -26,6 +26,9 @@ _BARE_OK = {
     "com", "in", "net", "org", "info", "co", "co.in", "org.in", "net.in", "gov.in", "nic.in", "bank.in", "io", "me", "app", "xyz", "top",
     "vip", "icu", "cc", "site", "online", "live", "shop", "club", "link", "ly", "gd", "to", "sbs", "cfd", "cyou", "buzz", "click",
     "store", "website", "space", "tech", "pro", "biz", "ws", "su", "ru", "cn", "lol", "rest", "bond", "life", "work", "world",
+    # endings used by betting, casino and crypto-giveaway sites
+    "bet", "casino", "poker", "win", "games", "game", "gg", "fun", "today", "money", "cash", "finance", "exchange", "trade", "markets",
+    "network", "ai", "pw", "plus", "best", "one", "run", "page", "digital", "global", "help", "support", "claims", "monster",
 }
 
 _SCHEME_URL = re.compile(r"(?i)\b(?:https?|hxxps?|h\*\*ps?)(?:://|\[://\]|\[:\]//)[^\s<>\"'`]+")

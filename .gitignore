@@ -26,3 +26,6 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# load-test output (tests/load/run_load.py)
+load-results/

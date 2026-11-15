@@ -68,8 +68,11 @@ flowchart TD
 | PII findings | Type, placeholder, offsets, confidence, length, and a keyed fingerprint (HMAC with the installation secret in `data_dir/secret.key`) | Stored and returned, never the value. The fingerprint cannot be reversed without the key. |
 | Links | Shown defanged. Personal-data query parameters are removed before any lookup. | The cleaned URL goes to the threat-intel services you enabled |
 | API keys | `SecretStr` in `Settings` | Never logged, returned or shown |
-| Passwords | Salted scrypt hashes in `data_dir/accounts.sqlite` | Never stored in plain text, never shown |
-| Activity log | Event type, account, time, browser family ("Chrome on Windows"), scan type and verdict | Moderators only. No message contents and no IP addresses. Rows older than 180 days are deleted. |
+| Passwords | Salted scrypt hashes in the accounts database | Never stored in plain text, never shown |
+| Activity log | Only `login`, `scan` and `feedback`: account id, username, role, time; for a scan its type, verdict and scan id; for feedback its category and reference | Moderators only. No message contents, links, file names, IP addresses or personal data. Rows older than 180 days are deleted. |
+| Security events | Failed sign-ins, wrong PINs and lockouts: failed-attempt counters on the account, sign-up PIN failures in a separate `security_events` table | Never shown in the activity log; used only for brute-force protection |
+| Uploaded files and apps | Memory, for one scan. APKs are read in memory and never written to disk, installed, run or sent anywhere | Only the SHA-256 and the static-analysis report are stored |
+| Metrics | Counts, latencies, route templates, scan types, verdict levels, provider names, exception class names | `/metrics` and `/v1/ops/stats` (token required); never content, links, accounts or keys |
 | Feedback | Redacted by the PII engine before it is stored | The consumer who sent it and moderators |
 
 The web app can highlight the original text in place because it holds that text in the browser session and the result
@@ -117,16 +120,84 @@ Visiting attacker-chosen URLs from a server is a classic SSRF risk. Each hop is 
 - `app/results.py` renders a `ScanResult`: verdict panel, actions, overview tiles and tabs (findings, links, personal
   data, original vs redacted, report).
 - `api/main.py`:
-  - bearer-token auth
-  - a per-client rate limit on scan endpoints, so live checks cannot be abused as an open proxy
+  - bearer-token auth. The only exemption is a direct call from the same machine, when no token is configured and no
+    proxy header is present.
+  - `X-Verioax-Owner` honoured only on authenticated requests
+  - per-client rate limits on scans, files and all `/v1` routes, so live checks can't be abused as an open proxy
   - size limits before processing
+  - `Idempotency-Key` replay
   - security headers
-  - generic error messages that never echo input back
+  - generic error messages that never echo input back (validation errors included)
+
+## Concurrency, storage and limits
+
+```mermaid
+flowchart LR
+    C["clients"] --> RL["rate limiter<br/>memory or Redis"]
+    RL --> W1["API worker 1"] & W2["API worker N"]
+    W1 & W2 --> S["scan slots<br/>(bounded, 503 when full)"]
+    S --> E["engine (threads)"]
+    E --> IH["intel hub<br/>pools · breakers · deadline"]
+    E --> DB[("SQLite (WAL) or PostgreSQL<br/>pooled, short transactions")]
+```
+
+- **Bounded work.** FastAPI runs the synchronous scan routes in its thread pool, so the event loop never blocks. Inside,
+  each engine allows `VERIOAX_MAX_CONCURRENT_SCANS` scans and `VERIOAX_MAX_CONCURRENT_FILE_SCANS` file scans at once. A
+  request that can't get a slot within `VERIOAX_SCAN_QUEUE_TIMEOUT_S` gets HTTP 503 with `Retry-After`; it never queues
+  without limit. Threat-intelligence calls run on one bounded executor (16 threads), with at most 4 calls per provider.
+- **Database layer** (`trustguard/db.py`):
+  - **SQLite:** one connection per thread, WAL, `busy_timeout`, `synchronous=NORMAL`. Short transactions, and unique
+    constraints instead of read-then-write checks.
+  - **PostgreSQL:** `psycopg` 3 with a connection pool.
+  - **Migrations:** versioned per component in `schema_migrations`. A SQLite file is copied before it is migrated.
+  - **Idempotency:** scan ids and the `(event, ref)` key of the activity log are unique, and inserts use
+    `ON CONFLICT DO NOTHING`. Retries and Streamlit reruns therefore can't create duplicates.
+- **Rate limits** (`trustguard/ratelimit.py`): a sliding window. In memory it is bounded with LRU; in Redis it is shared
+  across workers, falls back to memory when Redis is down, and stores hashed keys. The client address comes from
+  `X-Forwarded-For` only behind the proxies listed in `VERIOAX_TRUSTED_PROXIES`.
+- **Observability** (`trustguard/metrics.py`): request and scan counters, p50, p95 and p99 latencies, rejections,
+  database errors, provider outcomes and process CPU and memory, as Prometheus text and JSON.
+
+## Android apps (`extract/apk.py`, `appscan.py`)
+
+An upload is recognised as an app by its content: a ZIP with `AndroidManifest.xml` and `classes.dex`. It is then:
+
+1. Opened **in memory**, with limits:
+   - 50 MB file
+   - 40,000 entries
+   - 1 GB of declared uncompressed data
+   - a 250:1 compression ratio per member
+   - per-part size caps
+   - a 25-second time budget
+
+   Path-traversal names, duplicate entries and members that inflate past their declared size are reported, and the
+   offending member is not read.
+2. Parsed:
+   - the binary manifest, resolving labels through `resources.arsc`
+   - the v1 PKCS#7 and the v2/v3 signing-block certificates, read with `cryptography` (signatures are not verified)
+   - DEX string tables
+   - native library names
+   - packer signatures
+3. Turned into findings by `appscan.py`. They are combinations rather than single permissions: OTP theft, overlay plus
+   accessibility, a bank name on a sideloaded app, a test-key signature, a hidden launcher icon, and a data drop-off
+   address in the code.
+
+The app is never written to disk, installed or executed, and no part of it is uploaded. If the manifest can't be parsed,
+the verdict is INCONCLUSIVE with the reason, never LOW.
 
 ## Accounts and roles
 
-`trustguard/accounts.py` holds accounts, the activity log and feedback in their own SQLite database
-(`data_dir/accounts.sqlite`). The Streamlit app uses it directly, also when scans go through the separate API.
+`trustguard/accounts.py` holds accounts, the activity log and feedback in their own database: `accounts.sqlite`, or
+the shared PostgreSQL database. The Streamlit app uses it directly, also when scans go through the separate API.
+
+- **The activity log has three events.**
+  - `login` is written once per successful sign-in.
+  - `scan` is written once per completed scan, keyed by the scan id, so a rerun or a retry can't add a second row.
+  - `feedback` is written once per submitted item, keyed by its reference.
+
+  `_record()` refuses any other event type. Pages, navigation, sign-out, sign-up, password changes, failed sign-ins,
+  wrong PINs, lockouts and moderator actions write nothing to it. The brute-force counters live on the account and in
+  `security_events`.
 
 - **Two roles.** A *consumer* scans things and sees only their own history. A *moderator* also gets the moderation
   pages (overview, accounts, activity log, consumer feedback) and the platform-wide pages (threat intelligence,
@@ -143,8 +214,8 @@ Visiting attacker-chosen URLs from a server is a classic SSRF risk. Each hop is 
   so a suspension takes effect at once.
 - **Scan ownership.** Every stored scan has an `owner_id`. The app wraps the engine client in a `ScopedClient` that
   passes the signed-in account to every call. Moderator pages that need everyone's scans use `client().everyone`. The
-  API takes the owner in the `X-Verioax-Owner` header. When the API runs separately, set `TRUSTGUARD_API_TOKEN` so that
-  only the web app can call it.
+  API takes the owner in the `X-Verioax-Owner` header, and honours it only on authenticated requests. When the API runs
+  separately, set `TRUSTGUARD_API_TOKEN` so that only the web app can call it.
 - **What moderators see.** Traffic, the activity log and account status, never the contents of a consumer's scans. A
   consumer can attach one of their scans to feedback ("Report a wrong result"); only that scan's redacted result is
   then shown to moderators.

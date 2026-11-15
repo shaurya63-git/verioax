@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import re
 import socket
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -59,6 +60,22 @@ def redact_url_for_display(url: str, personal_params: list[str]) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query, safe="[]"), parts.fragment))
 
 
+def _guarded_rdap(res, domain: str, timeout_s: float) -> DomainInfo:
+    """RDAP under a circuit breaker: when rdap.org keeps failing, scans stop waiting for it for a minute."""
+    if res is None:
+        return lookup_rdap(domain, timeout_s=timeout_s)
+    g = res.guard("rdap")
+    skipped = g.begin(wait_s=min(2.0, timeout_s))
+    if skipped:
+        return DomainInfo(error="Registration lookups are paused for a minute after repeated failures" if skipped == "circuit_open"
+                          else "Too many registration lookups are in progress")
+    t = time.perf_counter()
+    info = lookup_rdap(domain, timeout_s=timeout_s)
+    failed = bool(info.error) and "no public RDAP record" not in info.error
+    g.end("error" if failed else "ok", time.perf_counter() - t, "rdap_error" if failed else "")
+    return info
+
+
 class URLAnalyzer:
     def __init__(self, settings: Settings, prefs: Preferences, hub: IntelHub, cache: TTLCache | None = None,
                  fetcher: SafeFetcher | None = None, tls_probe: Callable[[str], TLSInfo] | None = None,
@@ -68,7 +85,7 @@ class URLAnalyzer:
                                               max_bytes=settings.max_page_bytes, allowed_ports=settings.allowed_ports,
                                               user_agent=settings.user_agent, resolver=resolver)
         self._tls = tls_probe or (lambda host: probe_tls(host, timeout_s=settings.fetch_timeout_s, resolver=resolver))
-        self._rdap = rdap or (lambda dom: lookup_rdap(dom, timeout_s=settings.fetch_timeout_s))
+        self._rdap = rdap or (lambda dom: _guarded_rdap(getattr(hub, "res", None), dom, settings.fetch_timeout_s))
         self._resolver = resolver
 
     # ------------------------------------------------------------------ cached live helpers
@@ -279,9 +296,13 @@ class URLAnalyzer:
                                 summary=f"Not listed by {len(checked)} source(s)",
                                 explanation="Not being listed is not proof of safety: new phishing sites are often reported hours or days after they go live."))
         else:
+            down = [r.provider for r in rep.reputation if r.status in ("error", "unavailable")]
+            why = (f"{', '.join(down)} could not be reached or {'was' if len(down) == 1 else 'were'} skipped, so only the local indicator "
+                   "list was checked. That is not evidence that the link is safe." if down else
+                   "No online threat-intelligence service is configured or enabled. Add API keys in .env to enable them.")
             out.append(URLCheck(key="reputation", label="Threat intelligence", status="info" if checked else "unavailable", source="local",
                                 summary="Only the local indicator list was checked" if checked else "No source available",
-                                explanation="No online threat-intelligence service is configured or enabled. Add API keys in .env to enable them."))
+                                explanation=why))
 
         # page content
         page = rep.page

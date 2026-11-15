@@ -29,7 +29,8 @@ _HOW = {
                    "traffic police's official channels - not by forwarded messages."),
     "bank": "Open your bank's official app, or call the number printed on your card.",
     "government": "Look for the notice or scheme on the official .gov.in website, or check PIB Fact Check.",
-    "offer": "You can't win a draw you never entered. Check the brand's official website or app for any real offer.",
+    "offer": ("You can't win a draw you never entered, and real companies don't hand out money to everyone who signs up. Check the "
+              "brand's official website, app or verified account for any real offer - never through a link in the message."),
     "health": "Check with a doctor or the health ministry's official advisories.",
     "financial": "Check whether the platform or adviser is registered with SEBI on sebi.gov.in.",
     "policy_change": "Check the announcement on the service's or authority's official website.",

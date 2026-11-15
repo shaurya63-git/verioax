@@ -1,13 +1,14 @@
 # Verioax
 
-**Intelligent message, link & privacy protection.** Paste a suspicious SMS, WhatsApp message, email, link or document.
-Verioax removes your personal data first, then checks the content for scam and hoax signals, inspects every link, and
-explains its verdict in plain language: what it found, where, how sure it is, and what to do next.
+**Intelligent message, link & privacy protection.** Paste a suspicious SMS, WhatsApp message, email, link or document,
+or upload an Android app (APK). Verioax removes your personal data first, then checks the content for scam and hoax
+signals, inspects every link, and explains its verdict in plain language: what it found, where, how sure it is, and what
+to do next. Apps are analysed statically: they are never installed or run.
 
 People sign in as **consumers**, who scan things and keep their own private history, or as **moderators**. Moderators
 also see accounts, traffic, the activity log and consumer feedback, and they need a moderator security PIN to sign in.
 
-![A fake e-challan message analysed by Verioax: critical risk, highlighted evidence, recommended actions](docs/screenshots/message-scan.png)
+![A crypto-casino bonus post analysed by Verioax: high risk, scam type, score and confidence shown separately](docs/screenshots/message-scan.png)
 
 ## The problem
 
@@ -38,11 +39,23 @@ Verioax does the privacy step first, gives a verdict it can explain, and never o
      domain age) and threat-intelligence lookups run when enabled.
 3. **Explain.** You get:
    - One verdict: LOW, MEDIUM, HIGH, CRITICAL or INCONCLUSIVE.
-   - A 0–100 risk score and, separately, a confidence value.
-   - Every finding, with the exact text that triggered it, its severity and its evidence strength (weak, strong or
-     confirmed).
+   - The **scam type**: for example crypto casino / betting bonus, fake e-challan, digital arrest or malicious app.
+   - A 0–100 risk score and, separately, a confidence value. Confidence says how much evidence could be checked; it is
+     not a probability.
+   - Every finding, with:
+     - the exact fragment that triggered it
+     - its severity
+     - whether it is a **confirmed indicator** or a **suspicious pattern** (strong or weak)
+     - where it was detected: Verioax's own rules, a live page check, or a threat-intelligence service (live or cached)
+   - For every link, whether it was checked, not visited, unreachable or only partly checked. An unreachable link never
+     lowers the risk.
    - Concrete next steps, such as checking the challan on echallan.parivahan.gov.in, reporting on Chakshu, or calling 1930
      if money was lost.
+
+| | |
+|---|---|
+| ![APK verdict](docs/screenshots/apk-scan.png) | ![App analysis](docs/screenshots/apk-analysis.png) |
+| **Android apps**: a fake "SBI Rewardz" APK that can read and forward OTPs is rated high risk. | **App analysis**: permissions in plain language, signing certificate (an Android test key here), what the code can do, defanged links found inside. |
 
 | | |
 |---|---|
@@ -67,8 +80,15 @@ Verioax does the privacy step first, gives a verdict it can explain, and never o
 **Moderator UI**
 - **Moderator overview**: traffic for the last 14 days and the items that need attention.
 - **Accounts**: the status of every account, with suspend, reactivate and unlock.
-- **Activity log**: sign-ins, failed attempts and wrong PINs, scans (type and verdict only), feedback and moderator
-  actions, with CSV export.
+- **Activity log**: exactly three kinds of entries:
+  - successful sign-ins
+  - completed scans (type and verdict only)
+  - submitted feedback (category and reference)
+
+  Page views, navigation, reruns, failed sign-ins, wrong PINs, lockouts and moderator actions are never written to it.
+  Brute-force counters and lockouts still work; they are kept separately. CSV export is included.
+- **Service health**: scan latency, rejected requests, database errors and the state of each outside service. It shows
+  counts only, never content.
 - **Consumer feedback**: inbox with statuses (new, in review, resolved) and replies.
 - **Platform-wide pages**: threat intelligence, analytics across everyone's scans, and settings.
 
@@ -88,8 +108,17 @@ Both UIs show **Founded by: Shaurya Shah** under System status in the sidebar.
 - A review queue for low-confidence findings, and clean / needs-review / blocked status.
 
 **Scam & hoax engine**
-- 36 indicators in English, Hinglish and Hindi, grouped into 15 categories (phishing, government or bank impersonation,
-  digital arrest, task and job scams, prize and advance-fee fraud, investment scams, hoaxes and more).
+- 58 text indicators and 26 combination rules in English, Hinglish and Hindi, grouped into 17 categories (phishing, government or bank impersonation,
+  digital arrest, task and job scams, prize and advance-fee fraud, investment scams, **crypto & gambling**, malicious apps,
+  hoaxes and more).
+- **Crypto, casino and giveaway scams.** Examples: "$5,600 bonus for everyone who registers, withdraw instantly, post
+  deleted in an hour", wallet drainers, "send 1 ETH, get 2 back", airdrops that ask for a seed phrase.
+  - They are recognised from **independent evidence families**: a reward, mechanics that make it implausible, and a place
+    to register.
+  - A crypto mention, a casino advert or a promo code alone stays a 0-point context note.
+  - Matching sees through spelling tricks: `fr33 b0nus`, `c a s i n o`, `nyxwin dot com`, lookalike letters, zero-width
+    characters.
+  - Amounts are understood in rupees, lakh and crore, dollars and crypto tickers.
 - A claimed-identity registry of 52 Indian government bodies and schemes (PM-KISAN, Ayushman Bharat, PM Awas Yojana),
   banks, payment apps, couriers, platforms and brands often used as bait (Amul, Tata, DMart, Meesho), with their official
   domains. Restricted registries such as `gov.in`, `nic.in`, `bank.in` and `.sbi` are recognised.
@@ -124,18 +153,46 @@ Both UIs show **Founded by: Shaurya Shah** under System status in the sidebar.
 - Threat intelligence:
   - built-in list of known scam domains (seeded with the published IOCs of the e-challan campaign)
   - Google Safe Browsing, VirusTotal, URLhaus, PhishTank and OpenPhish
-  - every result is labelled *live*, *cached*, *local* or *not checked*
+  - every result is labelled *live*, *cached*, *local*, *unavailable* or *not checked*
+  - each provider has a timeout, a connection pool, bounded parallel calls and a circuit breaker; providers are asked in
+    parallel
+
+**Android app (APK) engine**: static analysis only. The app is never installed, run or uploaded anywhere. It checks:
+- **The manifest**, read from Android's binary format: package, app name, permissions, and exported activities,
+  services and receivers (including high-priority SMS receivers).
+- **The signing certificates** (v1, v2 and v3): debug certificates and the public Android test key are flagged.
+- **The code**: DEX string tables for SMS forwarding, accessibility abuse, overlays, dynamic code loading and data
+  drop-off addresses (Telegram bots, webhooks), plus native libraries and packers.
+
+Verdicts come from combinations, never from one permission. An example: a bank's name, SMS access, a high-priority SMS
+receiver and a Telegram bot.
+
+Archive safety:
+- The file type is checked from its content, never its extension.
+- Size, entry, compression-ratio and time limits stop ZIP bombs.
+- Path traversal and duplicate entries are reported.
+- Nothing is ever written to disk.
+- An app that can't be read is INCONCLUSIVE, never "safe".
 
 **Product**
 - Streamlit web app with sign-in, a consumer UI and a moderator UI (see above), and:
   - a dashboard
-  - message, link and file scanners (PDF, DOCX, TXT/CSV, and images through OCR)
+  - message, link and file scanners (PDF, DOCX, TXT/CSV, images through OCR, and Android APKs)
   - searchable history
   - a threat-intelligence status page
   - analytics
   - settings
-- FastAPI REST API that uses the same engine, with bearer-token auth and rate limiting. The web app can use it as its
-  backend.
+- FastAPI REST API that uses the same engine. The web app can use it as its backend. It has:
+  - token auth that is mandatory beyond the local machine
+  - per-account ownership that can't be spoofed
+  - rate limits in Redis or in memory
+  - bounded concurrency, with 503 when the server is busy
+  - idempotent retries
+  - Prometheus metrics
+- SQLite for one machine, PostgreSQL for several workers or servers, with versioned migrations and automatic backups
+  ([docs/deployment.md](docs/deployment.md)).
+- A design-token theme (`app/theme.py`) with WCAG AA contrast checked by the tests. Every risk level is shown with a
+  word and an icon, not by colour alone. The layout works on phone-sized screens.
 - Reports in PDF, Markdown, JSON and CSV. No raw personal data is included in any format.
 
 ![Dashboard with the built-in sample scans, labelled as demo data](docs/screenshots/dashboard.png)
@@ -171,19 +228,28 @@ To try it without any data of your own, use one of these:
 ### REST API
 
 ```bash
-uvicorn api.main:app --port 8000     # interactive docs: http://localhost:8000/docs
+uvicorn api.main:app --port 8000 --workers 2     # interactive docs: http://localhost:8000/docs
 
 curl -s http://localhost:8000/v1/scan/message \
   -H "Content-Type: application/json" \
   -d '{"text": "Dear Ravi Kumar, your e-challan of Rs 590 is pending. Pay now: https://parivahan-gov.in/pay"}'
 ```
 
+From the same machine, no token is needed. Anything else must send `Authorization: Bearer <token>`: the value of
+`TRUSTGUARD_API_TOKEN`, or the token the API wrote to `api.token` in the data folder on first start. Once you set
+`TRUSTGUARD_API_TOKEN`, every call needs it. See [docs/deployment.md](docs/deployment.md).
+
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Engine status, network mode, provider states |
+| GET | `/health`, `/ready` | Liveness; readiness (database answers) |
+| GET | `/metrics`, `/v1/ops/stats` | Prometheus / JSON metrics: counts and latencies only, no content (token required) |
 | POST | `/v1/scan/message` | `{text, sender?, mode?}`. `mode` is `full` (default), `scam` or `pii` |
 | POST | `/v1/scan/url` | `{url}` |
-| POST | `/v1/scan/file` | multipart upload (max 15 MB) |
+| POST | `/v1/scan/file` | multipart upload: documents and images up to 15 MB, Android APKs up to 50 MB |
+
+Scan requests accept an optional `Idempotency-Key` header. A retry with the same key returns the first result instead of
+storing a second scan. Over a rate limit the API answers 429 with `Retry-After`. When every scan slot is busy it answers
+503 with `Retry-After`.
 | GET | `/v1/scans` | History, with filters: `risk`, `input_type`, `category`, `search`, `since`, `until`, `limit` |
 | GET / DELETE | `/v1/scans/{id}` | One stored scan |
 | GET | `/v1/scans/{id}/report.{json\|md\|csv\|pdf}` | Report download |
@@ -199,7 +265,12 @@ To make the web app use the API instead of running the engine in-process, set `T
 ```bash
 cp .env.example .env                 # add any API keys you have (all optional)
 docker compose up --build            # web app :8501, API :8000 - both bound to localhost only
+
+# several users at once: PostgreSQL + Redis + 4 API workers (set TRUSTGUARD_API_TOKEN and POSTGRES_PASSWORD in .env first)
+docker compose -f docker-compose.prod.yml up --build -d
 ```
+
+See [docs/deployment.md](docs/deployment.md) for production setup, migrations, backups and monitoring.
 
 ### Optional extras
 
@@ -218,8 +289,15 @@ All settings are optional. Copy `.env.example` to `.env`. `.env` is git-ignored,
 | `VERIOAX_MODERATOR_PIN` | empty | The 6-digit PIN moderators enter at sign-up and sign-in. Empty = no moderator access. Keep it out of the repository. |
 | `TRUSTGUARD_DATA_DIR` | `data/runtime` | Scan history, accounts and activity log, lookup cache, preferences, your own indicator list |
 | `TRUSTGUARD_API_URL` | empty | If set, the web app talks to this API instead of the in-process engine |
-| `TRUSTGUARD_API_TOKEN` | empty | Requires `Authorization: Bearer <token>` on every `/v1` route. Set it whenever the API is reachable from other machines. |
-| `TRUSTGUARD_FETCH_TIMEOUT_S` / `TRUSTGUARD_MAX_REDIRECTS` / `TRUSTGUARD_MAX_PAGE_BYTES` | 8 / 5 / 1500000 | Limits for live link checks |
+| `TRUSTGUARD_API_TOKEN` | empty (a random token is generated into `api.token`) | Bearer token for the API. When set, every call needs it; when empty, only direct calls from the same machine are exempt. |
+| `VERIOAX_DATABASE_URL` | empty (SQLite) | PostgreSQL URL shared by every worker and server: accounts, activity, feedback, history, preferences |
+| `VERIOAX_DATABASE_POOL_SIZE` | 10 | PostgreSQL connections per process |
+| `VERIOAX_REDIS_URL` | empty (in-memory) | Redis for rate limits shared by every API worker |
+| `VERIOAX_SECRET_KEY` | empty (`secret.key` file) | Key for personal-data fingerprints; set the same value on every server that shares a database |
+| `VERIOAX_RATE_LIMIT_SCAN` / `_FILE` / `_API` / `_UI_SCAN` | `30/60` / `10/60` / `300/60` / `20/60` | Requests per client per window (seconds) |
+| `VERIOAX_TRUSTED_PROXIES` | empty | Reverse proxies whose `X-Forwarded-For` is trusted (addresses or networks) |
+| `VERIOAX_MAX_CONCURRENT_SCANS` / `_FILE_SCANS` | 8 / 2 | Scans running at once per process; more wait up to `VERIOAX_SCAN_QUEUE_TIMEOUT_S` (20 s), then get 503 |
+| `TRUSTGUARD_FETCH_TIMEOUT_S` / `TRUSTGUARD_MAX_REDIRECTS` / `TRUSTGUARD_MAX_PAGE_BYTES` | 8 / 5 / 1500000 | Limits for live link checks and threat-intelligence calls |
 | `OLLAMA_URL`, `OLLAMA_MODEL` | `http://localhost:11434`, `llama3.1:8b` | Optional local AI explanation |
 
 Analysis and privacy preferences are set on the **Settings** page and stored in the data directory:
@@ -256,6 +334,10 @@ The verdict is deterministic, rule-based scoring. An AI model never decides it.
      page that asks for card details.
    - A **strong** indicator (something honest senders practically never do) is never reported as LOW.
    - Weak signals alone can never go above MEDIUM.
+   - A **complete attack pattern** is at least HIGH, even when the site has never been reported. A complete pattern is
+     a strong combination finding built from three or more independent kinds of evidence, for example: a reward, offered
+     to everyone who registers, instantly withdrawable, on an outside site, with a countdown. The verdict then says that
+     the site itself is unverified rather than claiming it is malicious.
    - A message that hinges on a link nobody could verify is **INCONCLUSIVE**, not LOW.
 5. **Confidence** is computed separately, from how much evidence was actually available. A link that was never visited
    lowers confidence; it does not lower risk.
@@ -301,54 +383,72 @@ The full model, every combination rule and a worked example are in [docs/scoring
 ```
 verioax/
 ├── trustguard/            # the engine (no UI code)
-│   ├── accounts.py        #   consumers and moderators, sign-in, lockout, activity log, feedback
-│   ├── engine.py          #   orchestrates one scan: PII → scam → links → combination → risk → actions
+│   ├── accounts.py        #   consumers and moderators, sign-in, lockout, activity log (login/scan/feedback), feedback
+│   ├── engine.py          #   orchestrates one scan: PII → scam → links → combination → risk → actions; bounded slots
 │   ├── pii/               #   validators, recognisers, names, merge, redactor with leak sweep
-│   ├── scam/              #   indicators, sender analysis, claims, combination rules
+│   ├── scam/              #   indicators, normalisation, amounts, sender analysis, claims, combination rules, scam types
 │   ├── url/               #   parsing, static checks, SSRF-guarded fetcher, page inspection
-│   ├── intel/             #   threat-intelligence providers and status
-│   ├── extract/           #   PDF / DOCX / TXT / image text extraction (+ OCR)
+│   ├── intel/             #   threat-intelligence providers, status, resilience (circuit breakers, pools)
+│   ├── extract/           #   PDF / DOCX / TXT / image text extraction (+ OCR), safe static APK reader
+│   ├── appscan.py         #   Android app findings and report
 │   ├── risk.py            #   scoring model
 │   ├── recommend.py       #   recommended actions
 │   ├── reports/           #   PDF, Markdown, JSON, CSV
-│   ├── storage.py         #   SQLite scan history (redacted only)
-│   ├── evaluation.py      #   regression evaluation on the labelled set
+│   ├── db.py              #   SQLite / PostgreSQL layer, migrations with backups
+│   ├── storage.py         #   scan history (redacted only)
+│   ├── dbtools.py         #   check, backup, prune-activity, copy-to-postgres
+│   ├── ratelimit.py       #   sliding-window limits in memory or Redis, trusted proxies
+│   ├── metrics.py         #   counters, latency percentiles, Prometheus text
+│   ├── evaluation.py      #   evaluation on the development and held-out sets
 │   └── schemas.py         #   every data model (pydantic)
 ├── api/main.py            # FastAPI app
-├── app/                   # Streamlit app: sign-in, consumer and moderator pages, components, client (local or API)
+├── app/                   # Streamlit app: sign-in, consumer and moderator pages, design tokens (theme.py), client
 ├── data/iocs/             # seed list of known scam domains (defanged)
-├── data/eval/             # labelled regression messages
+├── data/eval/             # labelled development set (messages.jsonl) and frozen held-out set (holdout.jsonl)
 ├── samples/               # synthetic sample files for the File scanner
-├── tests/                 # pytest suite (no network access)
-├── docs/                  # architecture, scoring, reference review, GitHub guide
-├── Dockerfile, docker-compose.yml, .github/workflows/ci.yml
+├── tests/                 # pytest suite (no network access); tests/load/ has the Locust load test
+├── docs/                  # architecture, scoring, evaluation, deployment, load testing, reference review, GitHub guide
+├── Dockerfile, docker-compose.yml, docker-compose.prod.yml, .github/workflows/ci.yml
 └── pyproject.toml, requirements.txt, .env.example
 ```
 
 ## Testing
 
 ```bash
-pytest -q                          # 229 tests: PII, scam and hoax rules, URL checks, SSRF guard, risk model, accounts, API, both UIs
-python -m trustguard.evaluation    # labelled regression set (prints misses; exit code 1 on regression)
+pytest -q                                        # unit, API, UI, APK, database, theme and detection tests (no network)
+python -m trustguard.evaluation                  # development set: exit code 1 on a regression
+python -m trustguard.evaluation --set holdout    # frozen held-out set (see docs/evaluation.md)
 ruff check .
+python scripts/sync_theme.py --check             # theme tokens and .streamlit/config.toml agree
+
+# against real servers (CI does this too):
+VERIOAX_TEST_POSTGRES_URL=postgresql://user:pw@localhost:5432/verioax_test \
+VERIOAX_TEST_REDIS_URL=redis://localhost:6379/0  pytest -q tests/test_db.py tests/test_ratelimit.py
+
+python tests/load/run_load.py                    # load test, 10/25/50/100 users (docs/load-testing.md)
 ```
 
-The tests never touch the network. Live checks are faked with mock transports, and any real outbound connection fails
-the test.
+The tests never touch the network. Live checks and threat-intelligence services are faked with mock transports, and any
+real outbound connection fails the test.
 
-Current regression-set results (87 samples: 71 messages and 16 links scanned on their own):
+**Detection, on the frozen held-out set** (133 synthetic messages and links written before the rules were tuned, never
+tuned against; full results and limits in [docs/evaluation.md](docs/evaluation.md)):
 
-| Measure | Result |
-|---|---|
-| Scams rated HIGH or CRITICAL (messages and links) | 40 / 40 |
-| Hoaxes rated MEDIUM or above, with a hoax finding | 15 / 15 |
-| Unverifiable messages not rated LOW | 2 / 2 |
-| Genuine messages and official links wrongly flagged | 0 / 27 |
-| Unknown but legitimate sites raised above "not verified" | 0 / 3 |
+| Measure | Before this version | Now |
+|---|---|---|
+| Scams rated HIGH or CRITICAL (recall) | 42 / 81 (0.52) | 66 / 81 (0.81) |
+| Precision of HIGH or CRITICAL | 1.00 | 1.00 |
+| Scams, hoaxes and suspicious items flagged MEDIUM or worse | 63 / 91 (0.69) | 84 / 91 (0.92) |
+| Genuine messages rated MEDIUM or worse | 2 / 42 | 0 / 42 |
+| Crypto casino / giveaway / wallet scams rated HIGH+ | 3 / 19 | 17 / 19 |
 
-The regression set was written alongside the rules, from public advisories. It catches rules that break or start firing
-on genuine messages. It is **not** an independent accuracy benchmark, so don't quote it as one. Real-world accuracy will
-be lower, especially for new scam scripts.
+Both sets were written by the project, so these numbers show progress on known patterns. They are not real-world
+accuracy, and real-world recall will be lower. The risk score is a rule scale, not a calibrated probability.
+
+**Capacity** (measured on a 2-vCPU VM, API with 2 workers, offline mode,
+[docs/load-testing.md](docs/load-testing.md)): 100 simultaneous users scanning about once a second were served with no
+errors. p95 was 42 ms for messages, 24 ms for links and 640 ms for file uploads. A no-pause burst from one address got
+HTTP 429s, not errors.
 
 ## What works today
 
@@ -361,26 +461,34 @@ be lower, especially for new scam scripts.
 | Safe Browsing, VirusTotal, URLhaus, PhishTank, OpenPhish, Fact Check | Implemented against each service's documented API. Inactive until you add a key, and reported as untested until you press **Test**. |
 | Local AI explanation | Optional. Needs Ollama running locally. |
 | History, analytics, reports, REST API | Fully functional |
+| Android APK static analysis | Functional, offline. Validated on synthetic test apps and public sample APKs. Static only: it can't see code downloaded after install. |
+| PostgreSQL storage, Redis rate limits, several API workers | Functional. Tested against PostgreSQL 16 and Redis 7, and load-tested with 2 workers. |
 | Demo data | **Load sample scans** runs the real engine on built-in synthetic messages and labels the results as demo |
 
 ## Limitations
 
-- **Rule-based detection.** New scam scripts need new rules or indicators, and the regression set is not an independent
-  benchmark.
+- **Rule-based detection.** New scam scripts need new rules or indicators. Both evaluation sets were written by the
+  project. The held-out set was frozen before tuning and never tuned against, but it is not an independent benchmark (see
+  [docs/evaluation.md](docs/evaluation.md)).
 - **No JavaScript execution.** A phishing page that builds its form with JavaScript may look harmless to the page
   inspector. There is no visual comparison with the real site, and no certificate-transparency monitoring.
 - **Rule-based name detection** (spaCy is optional). Unusual names can be missed. The leak sweep and the review queue
   reduce this risk but do not remove it.
 - **OCR quality** depends on the image. PDF reports use DejaVu Sans, which has no Devanagari, so Hindi text in a PDF report
   may not render. The web app and the other report formats are unaffected.
+- **APK analysis is static.** It reads what an app declares and what strings its code contains. Code that is downloaded
+  or decrypted after installation, and heavily obfuscated or packed apps, can hide behaviour from it. The signing
+  certificates are read but not cryptographically verified. A LOW app verdict is therefore capped at medium confidence.
+- **Load-test figures come from one 2-CPU machine** running both the load generator and the API in offline mode. See
+  [docs/load-testing.md](docs/load-testing.md); measure your own hardware before relying on a number.
 - **Accounts are for a small installation.** Sign-in lasts for the browser tab, so a reload signs you out. That is
   deliberate: nothing reusable is stored in the browser. There is no "forgot password" email; a moderator can unlock a
   locked account, and passwords can be changed under My account. All moderators share one PIN, so change it if it may
   have leaked.
-- **Free hosting forgets accounts.** Accounts and history are stored on the app's own disk. Streamlit Community Cloud
-  wipes that disk whenever the app restarts or redeploys. Render's free tier wipes it too, including when the app
-  sleeps after 15 minutes without visitors. For accounts that last, use a host with a persistent disk (a paid Render
-  disk, a small VPS) or move the stores to a hosted database.
+- **Free hosting forgets accounts.** By default, accounts and history are stored on the app's own disk. Streamlit
+  Community Cloud wipes that disk whenever the app restarts or redeploys. Render's free tier wipes it too, including when
+  the app sleeps after 15 minutes without visitors. For accounts that last, set `VERIOAX_DATABASE_URL` to a hosted
+  PostgreSQL database, or use a host with a persistent disk.
 - **LOW is not a guarantee.** It means nothing suspicious was found. Verify unexpected requests for money or details
   through official channels.
 

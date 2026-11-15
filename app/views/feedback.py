@@ -34,7 +34,7 @@ with st.container(border=True):
                            help="Moderators will be able to open the redacted result of this one scan. Nothing else from your history is shared.")
     if st.button("Send to moderators", type="primary", icon=":material/send:", key=f"fb_send_{n}"):
         try:
-            fid = store.add_feedback(user, kind, subject, message, scan_id=scan_id or None, session=auth.session_id(), client=auth.client_label())
+            fid = store.add_feedback(user, kind, subject, message, scan_id=scan_id or None)
         except AccountError as exc:
             st.error(str(exc), icon=":material/error:")
         else:

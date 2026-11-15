@@ -1,4 +1,5 @@
-"""Text extraction for the File Scanner: TXT, CSV, PDF, DOCX and images (OCR).
+"""Text extraction for the File Scanner: TXT, CSV, PDF, DOCX and images (OCR). Android apps (APK) are not text: the
+engine sends them to the static analyser in ``trustguard.extract.apk`` instead.
 
 Every extractor returns one text plus a list of blocks (start, end, location) so that a finding at any offset can be
 traced back to "page 2", "table 1, row 3" or "line 14". Incomplete extraction is never silent: pages without a text
@@ -14,6 +15,11 @@ from bisect import bisect_right
 from dataclasses import dataclass, field
 
 MAX_CHARS = 200_000
+MAX_FILE_BYTES = 15 * 1024 * 1024          # documents and images
+MAX_APK_BYTES = 50 * 1024 * 1024           # Android apps
+MAX_PDF_PAGES = 300
+MAX_IMAGE_PIXELS = 40_000_000               # decompression-bomb guard for images
+TIME_BUDGET_S = 45.0
 TEXT_TYPES = {".txt", ".csv", ".md", ".log", ".eml"}
 IMAGE_TYPES = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tif", ".tiff"}
 SUPPORTED = TEXT_TYPES | IMAGE_TYPES | {".pdf", ".docx"}
@@ -65,12 +71,18 @@ class _Builder:
         return Extracted("".join(self.parts), self.fmt, self.blocks, self.warnings, **kw)
 
 
+def is_apk(name: str, data: bytes) -> bool:
+    from .apk import looks_like_apk
+    return looks_like_apk(name, data)
+
+
 def sniff(name: str, data: bytes) -> str:
+    """The file type from its first bytes (the name is only a fallback for plain text)."""
     head = data[:8]
     if head.startswith(b"%PDF"):
         return ".pdf"
     if head.startswith(b"PK"):
-        return ".docx"
+        return ".docx" if _is_docx(data) else ".zip"
     if head.startswith(b"\x89PNG"):
         return ".png"
     if head[:3] == b"\xff\xd8\xff":
@@ -97,12 +109,45 @@ def _ocr(image) -> str:
     return pytesseract.image_to_string(image, lang=langs)
 
 
+def _is_docx(data: bytes) -> bool:
+    import zipfile
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            return "word/document.xml" in z.namelist()[:5000]
+    except (zipfile.BadZipFile, OSError, ValueError, RuntimeError, NotImplementedError):
+        return False
+
+
+def _check_zip(data: bytes, max_entries: int = 5000, max_total: int = 150 * 1024 * 1024, max_ratio: int = 200) -> None:
+    """ZIP-bomb and malformed-archive guard for DOCX files, applied before any XML is parsed."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            infos = z.infolist()
+    except (zipfile.BadZipFile, OSError, ValueError, RuntimeError, NotImplementedError) as exc:
+        raise ExtractionError(f"the file is not a readable Word document ({type(exc).__name__})") from None
+    if len(infos) > max_entries:
+        raise ExtractionError(f"the document has {len(infos):,} parts (limit {max_entries:,})")
+    total = sum(i.file_size for i in infos)
+    if total > max_total:
+        raise ExtractionError(f"the document would expand to {total / 1e6:.0f} MB - refusing to open it (possible ZIP bomb)")
+    for i in infos:
+        if i.compress_size and i.file_size > 5_000_000 and i.file_size / i.compress_size > max_ratio:
+            raise ExtractionError("the document is compressed suspiciously well - refusing to open it (possible ZIP bomb)")
+        if i.flag_bits & 0x1:
+            raise ExtractionError("the document is encrypted")
+
+
 def extract(name: str, data: bytes) -> Extracted:
     if not data:
         raise ExtractionError("the file is empty")
+    if len(data) > MAX_FILE_BYTES:
+        raise ExtractionError(f"the file is larger than {MAX_FILE_BYTES // (1024 * 1024)} MB")
     ext = sniff(name, data)
+    if ext == ".zip":
+        raise ExtractionError("ZIP archives aren't scanned - upload the document itself, or the .apk if it is an Android app")
     if ext not in SUPPORTED:
-        raise ExtractionError(f"unsupported file type '{ext or 'unknown'}'. Supported: PDF, DOCX, TXT, CSV, PNG, JPG")
+        raise ExtractionError(f"unsupported file type '{ext or 'unknown'}'. Supported: PDF, DOCX, TXT, CSV, PNG, JPG and Android apps (APK)")
     if ext in TEXT_TYPES:
         return _text(data, ext)
     if ext == ".pdf":
@@ -143,8 +188,11 @@ def _text(data: bytes, ext: str) -> Extracted:
 
 
 def _pdf(data: bytes) -> Extracted:
+    import time
+
     from pypdf import PdfReader
     from pypdf.errors import PdfReadError
+    deadline = time.monotonic() + TIME_BUDGET_S
     try:
         reader = PdfReader(io.BytesIO(data))
         if reader.is_encrypted:
@@ -160,6 +208,9 @@ def _pdf(data: bytes) -> Extracted:
     ocr_used = False
     can_ocr = ocr_available()
     for n, page in enumerate(pages, start=1):
+        if n > MAX_PDF_PAGES or time.monotonic() > deadline:
+            b.warnings.append(f"only the first {n - 1} page(s) were read (page or time limit reached)")
+            break
         try:
             txt = page.extract_text() or ""
         except Exception:                                       # a broken page must not stop the rest
@@ -193,6 +244,7 @@ def _ocr_pdf_page(page) -> str:
 
 
 def _docx(data: bytes) -> Extracted:
+    _check_zip(data)
     try:
         import docx
         d = docx.Document(io.BytesIO(data))
@@ -222,6 +274,7 @@ def _image(data: bytes) -> Extracted:
     if not ocr_available():
         raise ExtractionError("reading images needs OCR: install Tesseract (see README) and the 'ocr' extra")
     from PIL import Image, ImageOps
+    Image.MAX_IMAGE_PIXELS = MAX_IMAGE_PIXELS
     try:
         with Image.open(io.BytesIO(data)) as pic:
             img = ImageOps.exif_transpose(pic).convert("RGB")
@@ -229,6 +282,8 @@ def _image(data: bytes) -> Extracted:
                 scale = 1200 / max(img.size)
                 img = img.resize((int(img.width * scale), int(img.height * scale)))
             text = _ocr(img)
+    except Image.DecompressionBombError:
+        raise ExtractionError("the image is too large to read safely") from None
     except (OSError, ValueError) as exc:
         raise ExtractionError(f"could not read the image: {exc}") from None
     for i, block in enumerate(re.split(r"\n\s*\n", text), start=1):

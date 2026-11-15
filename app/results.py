@@ -8,9 +8,15 @@ import ui
 from trustguard.pii import TYPE_LABELS
 from trustguard.schemas import CATEGORY_LABELS, ScanResult
 
-STRENGTH_WORD = {"confirmed": "Confirmed", "strong": "Strong signal", "weak": "Weak signal"}
-SOURCE_WORD = {"message": "message text", "sender": "sender", "url": "link (static check)", "page": "link (live check)",
-               "intel": "threat intelligence", "combination": "combination of signals", "file": "file"}
+STRENGTH_WORD = {"confirmed": "Confirmed indicator", "strong": "Strong pattern", "weak": "Weak signal"}
+STRENGTH_HELP = {"confirmed": "A threat-intelligence source or a verified fact confirms this. It is evidence, not just a pattern.",
+                 "strong": "A suspicious pattern that is typical of scams. It is not proof on its own.",
+                 "weak": "A weak sign that only matters together with others."}
+SOURCE_WORD = {"message": "the message text", "sender": "the sender", "url": "the link's address", "page": "the linked page",
+               "intel": "threat intelligence", "combination": "several signals together", "file": "the app file"}
+DETECTED_BY = {"local": "Verioax rules (no data sent anywhere)", "live_check": "Live check of the page (guarded backend visit)",
+               "live_intel": "Threat-intelligence service (live answer)", "cached_intel": "Threat-intelligence service (recent cached answer)",
+               "local_list": "Verioax list of known scam sites"}
 
 
 def render(r: ScanResult, original: str | None, *, key: str, client=None) -> None:
@@ -30,8 +36,14 @@ def render(r: ScanResult, original: str | None, *, key: str, client=None) -> Non
     with right:
         st.subheader("Overview")
         c = r.counts()
-        tiles = [("Scam signals", c["scam_indicators"]), ("Link signals", c["url_indicators"]), ("Personal data", c["pii_findings"]),
-                 ("Critical", c["critical_warnings"]), ("Claims to check", c["claims"]), ("For review", c["review_items"])]
+        if r.app is not None:
+            a = r.app
+            tiles = [("Permissions", len(a.permissions)), ("High-risk ones", sum(x.risk == "high" for x in a.permissions)),
+                     ("Open to others", a.component_counts.get("exported", 0)), ("Links in code", len(a.urls)),
+                     ("Critical", c["critical_warnings"]), ("For review", c["review_items"])]
+        else:
+            tiles = [("Scam signals", c["scam_indicators"]), ("Link signals", c["url_indicators"]), ("Personal data", c["pii_findings"]),
+                     ("Critical", c["critical_warnings"]), ("Claims to check", c["claims"]), ("For review", c["review_items"])]
         for row in (tiles[:3], tiles[3:]):
             cols = st.columns(3)
             for col, (label, value) in zip(cols, row, strict=True):
@@ -39,6 +51,8 @@ def render(r: ScanResult, original: str | None, *, key: str, client=None) -> Non
 
     is_link_scan = r.input_type.value == "url"
     tabs: list[tuple[str, object]] = []
+    if r.app is not None:                                            # an Android app: the app report comes first
+        tabs.append(("App analysis", lambda: _app(r)))
     if is_link_scan:                                                 # the link report is the main content of a link scan
         tabs.append(("Link report", lambda: _links(r)))
     if r.scam is not None and not is_link_scan:
@@ -72,6 +86,7 @@ def _pii_spans(r: ScanResult):
 
 def _findings(r: ScanResult, original: str | None, key: str) -> None:
     findings = [f for f in r.scam_findings if f.severity.value != "info"]
+    context = [f for f in r.scam_findings if f.severity.value == "info"]
     if original:
         st.markdown("**The message, with the parts that raised concern highlighted**")
         st.html(ui.highlight(original, _threat_spans(r, False), _pii_spans(r)))
@@ -82,26 +97,38 @@ def _findings(r: ScanResult, original: str | None, key: str) -> None:
         st.html(ui.highlight(r.redacted_text, _threat_spans(r, True), mark_placeholders=True))
         st.html(ui.legend(include_pii=False))
     if not findings:
-        st.success("No scam or hoax indicators were found in the text. That is not a guarantee that it is genuine.", icon=":material/check_circle:")
+        st.success("No scam or hoax indicators were found. That is not a guarantee that it is genuine.", icon=":material/check_circle:")
     else:
+        confirmed = sum(f.strength.value == "confirmed" for f in findings)
         st.markdown(f"**Findings ({len(findings)})** - open one to see why it was flagged")
+        st.caption(("Confirmed indicators come from a threat-intelligence source or a verified fact. " if confirmed else
+                    "None of these is a confirmed malicious indicator: ") +
+                   "Strong patterns and weak signals are suspicious patterns, not proof - the verdict comes from how many independent ones appear together.")
         for f in findings:
-            label = (f"{ui.sev_badge_md(f.severity.value)} :{'red' if f.strength.value == 'confirmed' else 'gray'}-badge[{STRENGTH_WORD[f.strength.value]}] "
-                     f"**{f.id}** {f.title}")
+            strength_color = "red" if f.strength.value == "confirmed" else "orange" if f.strength.value == "strong" else "gray"
+            label = f"{ui.sev_badge_md(f.severity.value)} :{strength_color}-badge[{STRENGTH_WORD[f.strength.value]}] **{f.id}** {f.title}"
             with st.expander(label):
                 st.markdown(f.explanation)
-                a, b, c = st.columns(3)
-                a.markdown(f"**Category**  \n{CATEGORY_LABELS[f.category]}")
-                b.markdown(f"**Confidence**  \n{f.confidence:.0%}")
-                c.markdown(f"**Found in**  \n{SOURCE_WORD.get(f.source, f.source)}")
-                if f.matched_text:
-                    st.markdown("**Evidence**")
-                    st.code(f.matched_text, language=None, wrap_lines=True)
+                quotes = [f.matched_text] if f.matched_text else []
+                if quotes:
+                    st.markdown("**What triggered it**" + (" (from the redacted text)" if f.source in ("message", "combination") else ""))
+                    sev = ui.T.SEVERITY.get(f.severity.value, ui.NEUTRAL)
+                    st.html("".join(f"<div class='tg-quote' style='--sev:{sev}'>{ui.esc(q)}</div>" for q in quotes))
                 extra = [e for e in f.evidence if e != f.matched_text]
                 if extra:
                     st.markdown("\n".join(f"- {e}" for e in extra))
+                st.html("<div class='tg-kv'>" + "".join(f"<span>{ui.esc(k)} <b>{ui.esc(v)}</b></span>" for k, v in (
+                    ("Severity", f.severity.value.capitalize()), ("Evidence", STRENGTH_WORD[f.strength.value]),
+                    ("Category", CATEGORY_LABELS[f.category]), ("Found in", SOURCE_WORD.get(f.source, f.source)),
+                    ("Detected by", DETECTED_BY.get(f.detected_by, f.detected_by)), ("Confidence", f"{f.confidence:.0%}"))) + "</div>")
+                st.caption(STRENGTH_HELP[f.strength.value])
                 if f.recommended_action:
                     st.markdown(f"**What to do:** {f.recommended_action}")
+    if context:
+        with st.expander(f"Context noted ({len(context)}) - not counted in the score", icon=":material/info:"):
+            st.caption("These details describe the message (a link, an amount, a topic). On their own they say nothing about fraud; "
+                       "they only matter together with the findings above.")
+            st.markdown("\n".join(f"- **{f.title}**" + (f": `{f.matched_text[:80]}`" if f.matched_text else "") for f in context))
     if r.scam and r.scam.sender:
         s = r.scam.sender
         st.markdown("**Sender**")
@@ -135,8 +162,10 @@ def _links(r: ScanResult) -> None:
         with st.container(border=True):
             lvl = u.final_assessment.value
             st.html(f"<div style='display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:space-between'>"
-                    f"<div class='tg-url'>{ui.esc(u.defanged)}</div>{ui.pill(ui.LEVEL_WORD[lvl], ui.STATUS[lvl])}</div>"
-                    f"<div class='tg-note' style='margin-top:.35rem'>{ui.esc(u.assessment_summary)}</div>")
+                    f"<div class='tg-url'>{ui.esc(u.defanged)}</div><div style='display:flex;gap:.4rem;flex-wrap:wrap'>"
+                    f"{ui.check_status_pill(u.check_status)}{ui.risk_pill(lvl)}</div></div>"
+                    f"<div class='tg-note' style='margin-top:.35rem'>{ui.esc(u.assessment_summary)}</div>"
+                    + (f"<div class='tg-note' style='margin-top:.25rem'><b>Link check:</b> {ui.esc(u.check_note)}</div>" if u.check_note else ""))
             meta = []
             if u.registrable_domain:
                 meta.append(f"Domain **{u.registrable_domain}**")
@@ -154,7 +183,7 @@ def _links(r: ScanResult) -> None:
                                                             for h in u.redirect_chain) + "</ol>")
             if u.reputation:
                 with st.expander("Threat-intelligence sources"):
-                    mode_word = {"live": "Live API", "cache": "Cached", "local": "Local list", "none": "-"}
+                    mode_word = {"live": "Live answer", "cache": "Cached answer", "local": "Local list", "none": "Not asked"}
                     st.dataframe(pd.DataFrame([{"Source": x.provider, "Result": x.status.replace("_", " "), "How": mode_word.get(x.mode, x.mode),
                                                 "Details": x.verdict} for x in u.reputation]), hide_index=True, width="stretch")
                     attributions = sorted({x.attribution for x in u.reputation if x.attribution and x.status in ("listed", "suspicious")})
@@ -165,6 +194,81 @@ def _links(r: ScanResult) -> None:
             st.caption(u.visit_note or "")
     st.caption("Links are shown defanged (hxxps, [.]) so they cannot be opened by accident. Verioax never opens them in your browser; "
                "live checks run in the backend's guarded fetcher.")
+
+
+# ---------------------------------------------------------------------------------------------- Android app
+_OID_NAMES = {"1.2.840.113549.1.9.1": "email", "2.5.4.5": "serial"}
+
+
+def _subject(subject: str) -> str:
+    """'O=Android,CN=Android,1.2.840.113549.1.9.1=android@android.com' -> 'CN=Android, O=Android, email=android@android.com'"""
+    parts = [x.strip() for x in subject.split(",") if "=" in x]
+    named = [f"{_OID_NAMES.get(k, k)}={v}" for k, v in (x.split("=", 1) for x in parts)]
+    named.sort(key=lambda x: (not x.startswith("CN="), not x.startswith("O="), x))
+    return ", ".join(named)[:160] or subject[:160]
+
+
+RISK_WORD_PERM = {"high": "High", "medium": "Medium", "low": "Low", "normal": "Normal"}
+RISK_SEV = {"high": "high", "medium": "medium", "low": "low", "normal": "info"}
+
+
+def _app(r: ScanResult) -> None:
+    a = r.app
+    st.caption("Static analysis only: the app was opened as a file and read. It was never installed or run, nothing was sent to "
+               "an outside service, and the links found inside it were not visited.")
+    if not a.parsed:
+        st.warning("The app could not be analysed, so there is no verdict on what it can do. That is not a sign that it is safe.",
+                   icon=":material/help:")
+    facts = [("App name", a.label or "-"), ("Package", a.package or "-"), ("Version", f"{a.version_name or '-'} (code {a.version_code or '-'})"),
+             ("Android versions", f"works from API {a.min_sdk or '-'}, built for API {a.target_sdk or '-'}"),
+             ("Presents itself as", a.claimed_entity or "-"),
+             ("File", f"{a.size_bytes / 1e6:.1f} MB" if a.size_bytes >= 1e6 else f"{max(1, round(a.size_bytes / 1e3))} KB"),
+             ("SHA-256", a.sha256)]
+    left, right = st.columns([1.1, 1], gap="large")
+    with left:
+        st.markdown("**The app**")
+        st.html(ui.facts_table(facts))
+        st.caption("Look the SHA-256 up yourself (for example on VirusTotal) if you want a second opinion; Verioax never uploads the file.")
+    with right:
+        st.markdown("**Signing**")
+        if a.certificates:
+            blocks = []
+            for c in a.certificates[:4]:
+                note = (ui.pill("Android test key - anyone can sign with it", ui.T.BAD, "✕") if c.test_key else
+                        ui.pill("Debug certificate", ui.T.WARN, "!") if c.debug else ui.pill("Publisher certificate", ui.NEUTRAL))
+                blocks.append(f"<div style='margin:.15rem 0 .7rem 0'>{note}<div class='tg-note' style='margin-top:.3rem;overflow-wrap:anywhere'>"
+                              f"{ui.esc(c.source)} signature - {ui.esc(_subject(c.subject))}</div></div>")
+            st.html("".join(blocks))
+        else:
+            st.html(ui.pill("Not signed", ui.T.BAD, "✕"))
+        st.caption("Certificates are read from the file but not cryptographically verified. A real bank or government app is "
+                   "signed by its publisher and installed from the Play Store.")
+    if a.permissions:
+        st.markdown("**Permissions it asks for** - a permission alone is not malware; the combinations are what matter")
+        order = {"high": 0, "medium": 1, "low": 2, "normal": 3}
+        rows = [[ui.pill(RISK_WORD_PERM[p.risk], ui.T.SEVERITY_TEXT[RISK_SEV[p.risk]], ui.T.SEVERITY_ICON[RISK_SEV[p.risk]]), p.short, p.meaning]
+                for p in sorted(a.permissions, key=lambda p: order.get(p.risk, 9))]
+        st.html(ui.table(["Risk", "Permission", "What it allows"], rows, raw_cols=(0,), muted_cols=(2,)))
+    comps = [c for c in a.components if c.role or c.exported]
+    if comps:
+        with st.expander(f"Components that other apps or the system can start ({len(comps)})"):
+            st.html(ui.table(["Kind", "Name", "Open to other apps", "Role"],
+                             [[c.kind, c.name, "yes" if c.exported else "no", c.role or "-"] for c in comps[:40]], muted_cols=(3,)))
+    cols = st.columns(2, gap="large")
+    blocks = [("Capabilities seen in the code", a.capabilities), ("Links inside the app (defanged, not visited)", a.urls),
+              ("Native libraries", a.native_libs), ("Packers / protectors", a.packers), ("Extra code files", a.embedded_code),
+              ("Archive problems", a.archive_issues)]
+    shown = [(t, items) for t, items in blocks if items]
+    for i, (title, items) in enumerate(shown):
+        with cols[i % 2]:
+            st.markdown(f"**{title}**")
+            if title.startswith("Links"):
+                st.html("".join(f"<div class='tg-url'>{ui.esc(x)}</div>" for x in items[:15]))
+            else:
+                st.markdown("\n".join(f"- {x}" for x in items[:15]))
+    if a.limitations:
+        with st.expander("Limits of this analysis", icon=":material/info:"):
+            st.markdown("\n".join(f"- {x}" for x in a.limitations))
 
 
 # ---------------------------------------------------------------------------------------------- personal data

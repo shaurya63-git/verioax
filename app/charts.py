@@ -1,7 +1,7 @@
 """Chart helpers (Altair). Thin bars, recessive axes, direct value labels, a tooltip on every mark.
 
 Colour jobs: risk levels use the fixed status scale (always paired with the level name on the axis, so colour is never
-the only cue); single-measure category charts use one hue (series slot 1, validated on the navy surface).
+the only cue); single-measure category charts use one hue (series slot 1, teal). All colours come from theme.py.
 """
 from __future__ import annotations
 
@@ -9,9 +9,11 @@ import altair as alt
 import pandas as pd
 import streamlit as st
 
+import theme
 from ui import INK2, INK3, LINE, STATUS
 
-SERIES = "#3987e5"
+SERIES = theme.CHART_SERIES[0]
+SERIES_COLORS = theme.CHART_SERIES
 _AXIS = dict(labelColor=INK2, titleColor=INK3, gridColor=LINE, domainColor=LINE, tickColor=LINE, labelFont="IBM Plex Sans",
              titleFont="IBM Plex Sans", labelFontSize=12, titleFontSize=11)
 
@@ -47,7 +49,7 @@ def risk_bars(dist: dict[str, int]) -> None:
     order = ["LOW", "MEDIUM", "HIGH", "CRITICAL", "INCONCLUSIVE"]
     names = {"LOW": "Low", "MEDIUM": "Medium", "HIGH": "High", "CRITICAL": "Critical", "INCONCLUSIVE": "Inconclusive"}
     data = {names[k]: dist.get(k, 0) for k in order}
-    colors = {names[k]: (STATUS[k] if k != "INCONCLUSIVE" else "#8090A8") for k in order}
+    colors = {names[k]: STATUS[k] for k in order}
     hbar(data, color=colors, sort=False, label="Scans", empty="No scans yet", keep_zero=True)
 
 

@@ -1,6 +1,6 @@
 [server]
 enableStaticServing = true
-maxUploadSize = 15
+maxUploadSize = 50
 headless = true
 
 [browser]
@@ -11,15 +11,15 @@ toolbarMode = "minimal"
 
 [theme]
 base = "dark"
-primaryColor = "#4C8DF6"
-backgroundColor = "#0F1A2B"
-secondaryBackgroundColor = "#17263D"
+primaryColor = "#20C9B5"
+backgroundColor = "#0B1220"
+secondaryBackgroundColor = "#17243A"
 textColor = "#E6EDF7"
-borderColor = "#263A5C"
+borderColor = "#29384F"
 showWidgetBorder = true
 baseRadius = "0.5rem"
 buttonRadius = "0.45rem"
-linkColor = "#7FB0FF"
+linkColor = "#38BDF8"
 linkUnderline = false
 baseFontSize = 15
 font = "IBM Plex Sans, sans-serif"
@@ -27,20 +27,20 @@ headingFont = "IBM Plex Sans, sans-serif"
 headingFontWeights = [600, 600, 600, 600, 600, 600]
 codeFont = "IBM Plex Mono, monospace"
 codeFontSize = "0.86rem"
-codeBackgroundColor = "#122036"
-codeTextColor = "#B9D3FF"
+codeBackgroundColor = "#17243A"
+codeTextColor = "#BAE6FD"
 metricValueFontWeight = 600
-dataframeBorderColor = "#263A5C"
-dataframeHeaderBackgroundColor = "#17263D"
-# status colours (also used by st.badge / :red[] markdown)
-greenColor = "#2DBA6B"
-yellowColor = "#FAB219"
-orangeColor = "#EC835A"
-redColor = "#E05252"
-blueColor = "#4C8DF6"
-grayColor = "#8090A8"
-chartCategoricalColors = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
-chartSequentialColors = ["#cde2fb", "#b7d3f6", "#9ec5f4", "#86b6ef", "#6da7ec", "#5598e7", "#3987e5", "#2a78d6", "#256abf", "#1c5cab"]
+dataframeBorderColor = "#29384F"
+dataframeHeaderBackgroundColor = "#17243A"
+# risk colours (also used by st.badge / :red[] markdown) - generated from app/theme.py by scripts/sync_theme.py
+greenColor = "#22C55E"
+yellowColor = "#FBBF24"
+orangeColor = "#FB923C"
+redColor = "#F43F5E"
+blueColor = "#38BDF8"
+grayColor = "#94A3B8"
+chartCategoricalColors = ["#20C9B5", "#38BDF8", "#FBBF24", "#FB923C", "#F43F5E", "#22C55E", "#94A3B8"]
+chartSequentialColors = ["#0F3B3B", "#11504D", "#14665F", "#177C72", "#1A9284", "#1DA897", "#20C9B5", "#5AD6C7", "#93E4DA", "#C9F2EC"]
 
 [[theme.fontFaces]]
 family = "IBM Plex Sans"
@@ -79,6 +79,6 @@ weight = 500
 style = "normal"
 
 [theme.sidebar]
-backgroundColor = "#0B1422"
-secondaryBackgroundColor = "#15233A"
-borderColor = "#1F3150"
+backgroundColor = "#111C2E"
+secondaryBackgroundColor = "#17243A"
+borderColor = "#29384F"

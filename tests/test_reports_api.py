@@ -63,10 +63,15 @@ def test_api_token(engine, monkeypatch):
     assert ok.status_code == 200
 
 
-def test_rate_limit(client, monkeypatch):
-    import api.main as m
-    statuses = [client.post("/v1/scan/url", json={"url": "https://example.org/"}).status_code for _ in range(m.SCANS_PER_MINUTE + 2)]
-    assert 429 in statuses
+def test_rate_limit(engine, monkeypatch):
+    from api.main import create_app
+    from trustguard import config
+    s = config.Settings(_env_file=None, data_dir=engine.settings.data_dir, rate_limit_scan="3/60")
+    monkeypatch.setattr("api.main.get_settings", lambda: s)
+    c = TestClient(create_app(engine))
+    statuses = [c.post("/v1/scan/url", json={"url": "https://example.org/"}) for _ in range(4)]
+    assert [r.status_code for r in statuses] == [200, 200, 200, 429]
+    assert int(statuses[-1].headers["Retry-After"]) >= 1
 
 
 def test_llm_output_is_validated():

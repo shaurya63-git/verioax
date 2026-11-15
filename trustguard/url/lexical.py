@@ -29,7 +29,7 @@ SHORTENERS = {
 }
 CHAT_LINKS = {"wa.me": "WhatsApp chat", "api.whatsapp.com": "WhatsApp chat", "chat.whatsapp.com": "WhatsApp group",
               "t.me": "Telegram chat", "telegram.me": "Telegram chat"}
-RISKY_TLDS = {"vip", "icu", "cc", "top", "xyz", "shop", "click", "buzz", "cyou", "sbs", "cfd", "rest", "lol", "quest", "bond",
+RISKY_TLDS = {"vip", "icu", "cc", "top", "xyz", "shop", "click", "buzz", "cyou", "sbs", "cfd", "rest", "lol", "quest", "bond", "win", "bet", "pw",
               "cam", "mom", "gq", "ml", "tk", "cf", "ga", "zip", "mov", "monster", "fun", "work", "support", "live", "online", "site"}
 FREE_HOSTING = {"web.app", "firebaseapp.com", "pages.dev", "workers.dev", "vercel.app", "netlify.app", "github.io", "gitlab.io",
                 "glitch.me", "herokuapp.com", "onrender.com", "repl.co", "replit.app", "blogspot.com", "wixsite.com", "weebly.com",
@@ -59,6 +59,8 @@ class URLSignal:
     explanation: str
     action: str = ""
     evidence: list[str] = field(default_factory=list)
+    entity: str | None = None                 # the organisation a lookalike domain imitates (brands.Entity key)
+    hints: tuple[str, ...] = ()               # naming hints used to name the scam type ("giveaway_words", "scheme", "crypto", "gambling")
 
 
 @dataclass
@@ -103,6 +105,12 @@ GIVEAWAY_TOKENS = {"free", "gift", "gifts", "giveaway", "offer", "offers", "priz
 SCHEME_TOKENS = ("yojana", "yojna")
 # Words of fake registration / status-check sites; next to a government name they make the domain an impersonation.
 ACTION_TOKENS = {"register", "registration", "apply", "form", "status", "beneficiary", "card", "portal", "list", "check", "online", "new"}
+# Casino, betting and crypto-giveaway words ("casino-bonus-5000.vip", "free-usdt-drop.top"). Short words are whole tokens only;
+# the longer ones also count inside a compound label ("neonslots", "luckyjackpot").
+GAMBLE_CRYPTO_TOKENS = {"casino", "casinos", "bet", "bets", "betting", "slots", "slot", "jackpot", "poker", "aviator", "rummy", "teenpatti", "satta",
+                        "spins", "usdt", "btc", "eth", "crypto", "airdrop", "presale", "staking", "doubler", "wallet", "nft"}
+GAMBLE_CRYPTO_INFIX = ("casino", "jackpot", "airdrop", "presale", "teenpatti", "slots", "usdt", "betting")
+BONUS_TOKENS = {"bonus", "free", "claim", "drop", "reward", "rewards", "gift", "giveaway", "win", "winner", "promo", "register", "signup", "withdraw"}
 # Brand keywords that also occur inside ordinary words ("datatables", "amulet"): matched only as whole domain tokens.
 AMBIGUOUS_KEYWORDS = {"tata", "amul"}
 
@@ -236,13 +244,14 @@ def check(p: ParsedURL, *, claimed_entities: list[str] | None = None) -> Lexical
                                    or (e.is_government and action))
             sev = SV.CRITICAL if critical else SV.HIGH if strong else SV.MEDIUM
             signals.append(URLSignal(f"lookalike_{kind}", cat, title, sev, ST.STRONG if strong else ST.WEAK,
-                                     0.88 if strong else 0.7, explanation, e.verify or "Type the organisation's official address yourself instead.", [detail]))
+                                     0.88 if strong else 0.7, explanation, e.verify or "Type the organisation's official address yourself instead.", [detail],
+                                     entity=e.key, hints=(("giveaway_words",) if giveaway else ()) + (("lure_words",) if lure else ())))
             rows.append((title, detail))
         if gov_like:
             lookalike_of.append("government_generic")
             signals.append(URLSignal("gov_lookalike", C.GOVERNMENT_IMPERSONATION, "Pretends to be a government domain", SV.CRITICAL, ST.STRONG, 0.9,
                                      f"'{p.registrable}' contains 'gov' but is not under .gov.in. Real Indian government sites end in .gov.in or .nic.in.",
-                                     "Only trust government links that end in .gov.in or .nic.in.", [p.registrable]))
+                                     "Only trust government links that end in .gov.in or .nic.in.", [p.registrable], entity="government_generic"))
             rows.append(("Pretends to be a government domain", f"'{p.registrable}' imitates a .gov.in address"))
         if scheme_hit:
             lookalike_of.append("government_generic")
@@ -251,7 +260,8 @@ def check(p: ParsedURL, *, claimed_entities: list[str] | None = None) -> Lexical
                                      SV.CRITICAL if strong_s else SV.MEDIUM, ST.STRONG if strong_s else ST.WEAK, 0.85 if strong_s else 0.7,
                                      f"'{p.registrable}' uses a scheme name ('yojana') but is not a government domain. Real scheme portals end in .gov.in or "
                                      ".nic.in. Fake 'yojana registration' sites collect Aadhaar and bank details or charge a 'registration fee'.",
-                                     "Look the scheme up on myscheme.gov.in or india.gov.in and apply only there.", [p.registrable]))
+                                     "Look the scheme up on myscheme.gov.in or india.gov.in and apply only there.", [p.registrable],
+                                     entity="government_generic", hints=("scheme",) + (("giveaway_words",) if giveaway else ())))
             rows.append(("Uses a government scheme name in an unofficial domain", f"'{p.registrable}' is not a .gov.in / .nic.in domain"))
         checks.append(URLCheck(key="lookalike", label="Domain similarity",
                                status="fail" if any(s.strength == ST.STRONG for s in signals if s.key.startswith(("lookalike", "gov_", "scheme_"))) else "warn",
@@ -274,13 +284,28 @@ def check(p: ParsedURL, *, claimed_entities: list[str] | None = None) -> Lexical
                                  f"'{p.registrable}' is made of giveaway words ({', '.join(giveaway_words)})"
                                  + (f" on a throwaway ending (.{p.suffix})" if tld_risky else "")
                                  + ". Real brands run offers on their own websites, not on domains named after the prize.",
-                                 "Don't enter details or forward the link.", [p.registrable]))
+                                 "Don't enter details or forward the link.", [p.registrable], hints=("giveaway_words",)))
     elif official or registry:
         checks.append(URLCheck(key="lookalike", label="Domain similarity", status="pass", summary="Matches a verified domain exactly"))
     else:
         checks.append(URLCheck(key="lookalike", label="Domain similarity", status="pass", summary="No resemblance to known brands found",
                                explanation="Compared with the official domains of Indian government services and schemes, banks, payment apps, couriers and "
                                            "brands often used as bait."))
+
+    # ---- 3b. casino / crypto-giveaway naming ("casino-bonus-5000.vip")
+    gc_words = sorted((GAMBLE_CRYPTO_TOKENS & toks) | {w for w in GAMBLE_CRYPTO_INFIX for t in toks if w in t and t != w and len(t) > len(w) + 1})
+    bonus_words = sorted(BONUS_TOKENS & toks)
+    if unofficial and gc_words and (bonus_words or tld_risky):
+        strong_gc = bool(bonus_words) and tld_risky
+        signals.append(URLSignal("crypto_gambling_domain", C.CRYPTO_GAMBLING, "Casino or crypto-giveaway words in an unknown domain",
+                                 SV.HIGH if strong_gc else SV.LOW, ST.STRONG if strong_gc else ST.WEAK, 0.82 if strong_gc else 0.65,
+                                 f"'{p.registrable}' is named after {', '.join(gc_words + bonus_words)}"
+                                 + (f" on a throwaway ending (.{p.suffix})" if tld_risky else "")
+                                 + ". Fake casino and crypto-bonus sites are named after the bait; licensed operators use their brand name.",
+                                 "Don't register or deposit on this site.", [p.registrable],
+                                 hints=("gambling",) if set(gc_words) & {"casino", "casinos", "bet", "bets", "betting", "slots", "slot", "jackpot", "poker",
+                                                                        "aviator", "rummy", "teenpatti", "satta", "spins"}
+                                 else ("crypto_giveaway",) if bonus_words else ("crypto",)))
 
     # ---- 4. homograph / punycode
     if p.is_punycode:

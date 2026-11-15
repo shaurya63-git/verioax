@@ -100,7 +100,8 @@ def test_sample_file_scan_flow(at_factory):
     at.button_group(key="file_sample").set_value("KYC phishing email (PDF)").run()
     next(b for b in at.button if b.label == "Check file").click().run()
     _ok(at)
-    assert "bank impersonation" in _html(at)
+    page = _html(at)
+    assert "Likely scam: fake account / KYC verification" in page or "Likely scam: bank or card phishing" in page
 
 
 def test_feedback_reaches_the_moderators_and_scans_stay_private(at_factory):
@@ -124,3 +125,100 @@ def test_feedback_reaches_the_moderators_and_scans_stay_private(at_factory):
     assert "9876501234" not in page and "[PHONE_" in page                  # personal details were redacted before saving
     mod.switch_page("views/history.py").run()
     assert "KBC" not in _html(mod)                                       # a consumer's scans are not in the moderator's history
+
+
+# ----------------------------------------------------------------------------------------------- what reaches the activity log
+def _store():
+    from trustguard.accounts import AccountStore
+    from trustguard.config import get_settings
+    from trustguard.db import open_database
+    return AccountStore(open_database(get_settings(), "accounts.sqlite"))     # the same database the app uses (SQLite or PostgreSQL)
+
+
+def _mine(name):
+    return [r for r in _store().activity(limit=5000) if r["username"] == name]
+
+
+def test_pages_navigation_and_reruns_create_no_activity(at_factory):
+    at, name = sign_up(at_factory)
+    assert [r["event"] for r in _mine(name)] == ["login"]                  # signing up signs in once: one entry
+    for page in CONSUMER_PAGES + CONSUMER_PAGES[::-1]:                   # navigate everywhere, twice
+        at.switch_page(page).run()
+        at.run()                                                         # and rerun each page
+        _ok(at)
+    assert [r["event"] for r in _mine(name)] == ["login"]
+
+
+def test_one_scan_is_one_activity_entry_even_across_reruns(at_factory):
+    at, name = sign_up(at_factory)
+    at.switch_page("views/scan_message.py").run()
+    at.text_area(key="msg_text").set_value("Your e-challan of Rs 500 is pending. Pay now: https://echallan-pay.vip/x").run()
+    next(b for b in at.button if b.label == "Check message").click().run()
+    at.run()
+    at.run()                                                             # reruns keep showing the result; they don't rescan
+    scans = [r for r in _mine(name) if r["event"] == "scan"]
+    assert len(scans) == 1 and scans[0]["kind"] == "message" and scans[0]["verdict"] in ("HIGH", "CRITICAL")
+    assert "echallan-pay" not in repr(scans)
+
+
+def test_moderator_pages_and_actions_create_no_activity(at_factory):
+    mod, name = sign_up(at_factory, "moderator")
+    for page in MODERATOR_PAGES:
+        mod.switch_page(page).run()
+        _ok(mod)
+    mod.switch_page("views/mod_activity.py").run()
+    assert [r["event"] for r in _mine(name)] == ["login"]
+    page = _html(mod) + " ".join(str(d.value) for d in mod.dataframe)
+    assert "Opened page" not in page and "Failed sign-in" not in page
+
+
+# ---------------------------------------------------------------------------------------------- result screen details
+def _result_page(kind: str):
+    """Render one scan result on its own page (AppTest can't drive the file uploader, so APKs are scanned in-process)."""
+    import sys
+    from pathlib import Path
+    root = Path.cwd()
+    for p in (str(root), str(root / "app"), str(root / "tests")):
+        if p not in sys.path:
+            sys.path.insert(0, p)
+    import streamlit as st
+
+    import results
+    import ui
+    from trustguard.config import Preferences, get_settings
+    from trustguard.engine import TrustGuardEngine
+    ui.inject_css()
+    eng = TrustGuardEngine(get_settings(), Preferences(network_checks=False, intel_lookups=False, factcheck_lookups=False), store=False)
+    if kind == "apk":
+        import apkfactory
+        r = eng.scan_file("SBI_Rewardz.apk", apkfactory.sms_stealer()).result
+    else:
+        r = eng.scan_message("I am giving away $3,000 to everyone who registers on luckyspin-casino.io - withdraw instantly! "
+                             "Use promo code SPIN. This post will be deleted in 1 hour, only the fastest get it!").result
+    st.session_state["shown"] = r.scan_id
+    results.render(r, None, key="t")
+
+
+@pytest.mark.parametrize("kind", ["message", "apk"])
+def test_result_screen_explains_every_finding(kind, monkeypatch):
+    st_testing = pytest.importorskip("streamlit.testing.v1")
+    monkeypatch.chdir(Path(__file__).resolve().parents[1])
+    at = st_testing.AppTest.from_function(_result_page, args=(kind,), default_timeout=60)
+    at.run()
+    _ok(at)
+    page = _html(at)
+    md = " ".join(str(m.value) for m in at.markdown) + " ".join(str(c.value) for c in at.caption)
+    labels = " ".join(e.label for e in at.expander)
+    assert "Confidence" in page and "not a probability" in page                    # score and confidence shown separately
+    assert "Detected by" in page and "Verioax rules" in page                        # where each finding came from
+    assert "suspicious patterns, not proof" in md or "not proof" in md
+    if kind == "message":
+        assert "Crypto casino / betting bonus scam" in page and "High risk" in page
+        assert "tg-quote" in page                                                    # the fragment that triggered a finding
+        assert "Context noted" in labels and "not counted in the score" in labels
+        assert "Not checked live" in page and "luckyspin-casino[.]io" in page and "https://luckyspin" not in page
+    else:
+        tabs = [t.label for t in at.tabs]
+        assert tabs[0] == "App analysis"
+        assert "com.sbi.rewardz.points" in page and "Android test key" in page and "RECEIVE_SMS" in page and "email=android@android.com" in page
+        assert "never installed or run" in md

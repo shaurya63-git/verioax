@@ -16,13 +16,15 @@ SAMPLES = {"KYC phishing email (PDF)": "kyc_phishing_email.pdf", "Forwarded mess
 SAMPLES = {label: name for label, name in SAMPLES.items() if (SAMPLE_DIR / name).is_file()}
 
 auth.require()
-ui.page_header("File scanner", "Upload a document or a screenshot. Verioax extracts the text, finds and removes personal data, "
-                               "and checks the content and its links for scams.")
+ui.page_header("File scanner", "Upload a document, a screenshot or an Android app (APK). Verioax extracts the text, removes "
+                               "personal data and checks the content and its links for scams - or reads an app's permissions, "
+                               "signing certificate and code strings without ever installing or running it.")
 
 with st.container(border=True):
     pick = st.pills("Try a sample file", list(SAMPLES), key="file_sample") if SAMPLES else None
-    up = st.file_uploader("File", type=["pdf", "docx", "txt", "csv", "png", "jpg", "jpeg"], key="file_up",
-                          help="PDF, DOCX, TXT, CSV, or an image such as a WhatsApp screenshot (read with OCR). Up to 15 MB.")
+    up = st.file_uploader("File", type=["pdf", "docx", "txt", "csv", "png", "jpg", "jpeg", "apk"], key="file_up",
+                          help="PDF, DOCX, TXT, CSV, or an image such as a WhatsApp screenshot (read with OCR), up to 15 MB. "
+                               "Android apps (.apk) up to 50 MB: analysed statically - never installed, run or uploaded anywhere.")
     if up is not None:
         source = (up.name, up.getvalue())
     elif pick:
@@ -40,7 +42,7 @@ with st.container(border=True):
 
 if go and source is not None:
     name, data = source
-    with st.spinner(f"Reading {name} and analysing its content..."):
+    with st.spinner(f"Reading {name} and analysing it..." if name.lower().endswith(".apk") else f"Reading {name} and analysing its content..."):
         try:
             st.session_state.file_result = client().scan_file(name, data, mode or AnalysisMode.FULL)
         except ClientError as exc:

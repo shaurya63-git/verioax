@@ -1,13 +1,13 @@
 """Shared, cached objects for all pages."""
 from __future__ import annotations
 
-from pathlib import Path
-
 import streamlit as st
 
-from client import ScopedClient, make_client
+from client import ClientError, ScopedClient, make_client
 from trustguard.accounts import AccountStore
 from trustguard.config import get_settings
+from trustguard.db import open_database
+from trustguard.ratelimit import Rate, make_limiter
 
 NO_ACCOUNT = 0          # owner id used when nobody is signed in: matches no scans (account ids start at 1)
 
@@ -26,23 +26,28 @@ def accounts() -> AccountStore:
         from trustguard.pii import analyze_pii
         return analyze_pii(text)[1].redacted_text
 
-    store = AccountStore(Path(s.data_dir) / "accounts.sqlite",
+    store = AccountStore(open_database(s, "accounts.sqlite"),
                          moderator_pin=s.moderator_pin.get_secret_value() if s.moderator_pin else None, redact=redact)
     store.purge_activity(older_than_days=180)
     return store
 
 
-def client_label() -> str:
-    """'Chrome on Windows' - enough to read traffic, without storing IP addresses or full user-agent strings."""
+@st.cache_resource(show_spinner=False)
+def _scan_limiter():
+    """Per-account scan limit for the web app (shared through Redis when several app processes run)."""
+    s = get_settings()
+    return make_limiter(s.redis_url.get_secret_value() if s.redis_url else None)
+
+
+def _throttle(uid: int | None) -> None:
+    s = get_settings()
     try:
-        ua = st.context.headers.get("User-Agent") or ""
-    except Exception:                                   # no browser context (tests, scripts)
-        return ""
-    browser = next((b for b, mark in (("Edge", "Edg/"), ("Opera", "OPR/"), ("Samsung Internet", "SamsungBrowser"), ("Chrome", "Chrome/"),
-                                      ("Firefox", "Firefox/"), ("Safari", "Safari/")) if mark in ua), "Browser")
-    system = next((o for o, mark in (("Android", "Android"), ("iPhone", "iPhone"), ("iPad", "iPad"), ("Windows", "Windows"),
-                                     ("macOS", "Mac OS X"), ("Linux", "Linux")) if mark in ua), "")
-    return f"{browser} on {system}" if system else browser
+        who = f"user:{uid}" if uid else f"ip:{st.context.ip_address or 'unknown'}"
+    except Exception:                                  # no request context (tests)
+        who = f"user:{uid or 0}"
+    d = _scan_limiter().hit(f"ui-scan:{who}", Rate.parse(s.rate_limit_ui_scan))
+    if not d.allowed:
+        raise ClientError(f"You're scanning very quickly. Please wait {d.retry_after} second(s) and try again.")
 
 
 def client() -> ScopedClient:
@@ -50,14 +55,14 @@ def client() -> ScopedClient:
     uid = st.session_state.get("uid")
 
     def on_scan(result) -> None:
+        """A completed scan: one activity entry (type and verdict only), keyed by the scan id so it can't be logged twice."""
         store = accounts()
         user = store.get(uid) if uid else None
         if user is not None:
-            sample = " (sample)" if result.processing.demo else ""
-            store.log("scan", user=user, detail=f"{result.input_type.value} scan{sample}: {result.overall_risk.value} - {result.scan_id}",
-                      session=st.session_state.get("sid"), client=client_label())
+            store.record_scan(user, scan_id=result.scan_id, input_type=result.input_type.value, verdict=result.overall_risk.value,
+                              demo=result.processing.demo)
 
-    return ScopedClient(_shared_client(), owner_id=uid if uid else NO_ACCOUNT, on_scan=on_scan)
+    return ScopedClient(_shared_client(), owner_id=uid if uid else NO_ACCOUNT, on_scan=on_scan, throttle=lambda: _throttle(uid))
 
 
 def ocr_available() -> bool:
