@@ -160,3 +160,6 @@
 {"id": "D140", "label": "benign", "category": "awareness", "text": "Police warn of fake crypto casino posts promising $5,000 bonuses to everyone who registers. The sites ask for a 'withdrawal fee' and never pay out. Do not register on such sites."}
 {"id": "D141", "label": "benign", "category": "awareness", "text": "Cyber cell advisory: experts caution against 'airdrop' posts that offer free USDT to everyone who connects a wallet. These are scams that drain your wallet. Never share your seed phrase with anyone."}
 {"id": "D142", "label": "benign", "category": "news", "text": "News: researchers warned about a wave of fake betting apps offering instant-withdrawal bonuses for signing up. Users who deposited money to unlock the bonus were cheated, police said."}
+{"id": "D143", "label": "threat", "category": "bank_phishing", "text": "please provide your hdfc credit card 16 digit number, cvv, expiry month/year\ni want to do some changes in the card"}
+{"id": "D144", "label": "threat", "category": "bank_phishing", "text": "Dear customer, I am from ICICI credit card team. To increase your limit send card number, expiry and CVV on this number."}
+{"id": "D145", "label": "benign", "category": "bank_genuine", "text": "HDFC Bank never asks for your card number, CVV, expiry date or OTP. Do not share them with anyone."}

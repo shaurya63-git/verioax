@@ -209,3 +209,25 @@ def test_money_amounts():
 def test_negated_requests_are_ignored():
     found = {m.indicator.key for m in I.find("Never share your seed phrase or OTP with anyone. No one will ask you to connect your wallet to claim rewards.")}
     assert not ({"seed_phrase_request", "credential_request", "wallet_connect_lure"} & found)
+
+
+# ---------------------------------------------------------------------------------------------- card details asked for directly
+@pytest.mark.parametrize("text", [
+    "please provide your hdfc credit card 16 digit number, cvv, expiry month/year\ni want to do some changes in the card",
+    "Sir I am calling from SBI card department, kindly send your card number and CVV to update your credit limit",
+    "Apna debit card number, expiry aur CVV bhejo, card upgrade karna hai",
+    "Share the 3 digit number on the back of your card and the expiry date to stop the deduction",
+])
+def test_requests_for_card_number_cvv_or_expiry_are_critical_without_a_link(engine, text):
+    r = scan(engine, text)
+    assert r.overall_risk == RiskLevel.CRITICAL and r.scam_type == "bank_phishing"
+    assert "card_details_request" in {f.indicator for f in r.scam_findings}
+
+
+@pytest.mark.parametrize("text", [
+    "HDFC Bank never asks for your card number, CVV, expiry date or OTP. Do not share them with anyone.",
+    "Never share your CVV or card details with anyone, even if they claim to be from the bank.",
+    "Your HDFC Credit Card ending 4321 has been used for Rs 2,499 at Amazon. Not you? Call 1800-202-6161.",
+])
+def test_card_safety_advice_and_card_alerts_stay_low(engine, text):
+    assert scan(engine, text).overall_risk == RiskLevel.LOW

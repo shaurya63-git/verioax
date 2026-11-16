@@ -310,6 +310,24 @@ def combine(ta: TextAnalysis, urls: list[URLAnalysis], text: str) -> list[RawFin
         add("electricity_callback", C.FINANCIAL_FRAUD, "Disconnection threat with a personal callback number", SV.HIGH, ST.STRONG, 0.9,
             "Fake electricity notices tell you to call an 'officer' on a mobile number. Real boards don't do this.",
             "Check your bill in the official app of your electricity board.", ["disconnection threat", "callback number"], "Disconnection + callback")
+    # C10b card details asked for directly: "send your card number, CVV and expiry" (no link needed - you just reply)
+    if "credential_request" in k:
+        low = text.lower()
+        card_parts = [name for name, pat in (("card number", r"card\s+(?:(?:\d{1,2}|sixteen)[\s-]?digits?\s+)?(?:number|no)|(?:16|sixteen)[\s-]?digits?"),
+                                             ("CVV", r"\bcvv\d?\b|\bcvc\b|card\s+verification|(?:3|three)[\s-]?digits?\s+(?:number|code)\s+on\s+the\s+back"),
+                                             ("expiry date", r"\bexpiry\b|\bexpiration\b|valid\s+(?:thru|till|until)"),
+                                             ("card PIN", r"\b(?:atm|card)\s*pin\b"))
+                      if re.search(pat, low)]
+        bank_claim = [e for e in claimed if e.kind in ("bank", "payments")]
+        if len(card_parts) >= 2 or (card_parts and bank_claim):
+            who = f" while naming {bank_claim[0].name}" if bank_claim else ""
+            add("card_details_request", C.FINANCIAL_FRAUD, "Asks you to send your card number, CVV or expiry", SV.CRITICAL, ST.STRONG, 0.93,
+                f"The message asks you to send {', '.join(card_parts)}{who}. With these details anyone can spend money from your card "
+                "online. No bank ever asks for them - not by message, call or email, and not to 'make changes to your card'.",
+                "Don't reply or share anything. If you already did, call the number on the back of your card right away to block it, "
+                "and report it on 1930 or cybercrime.gov.in.",
+                [f"asks for: {', '.join(card_parts)}"] + ([f"names {bank_claim[0].name}"] if bank_claim else []), "Card details requested directly",
+                families=tuple(["request"] + card_parts + (["bank claim"] if bank_claim else [])))
     # C10 card details + link
     if "credential_entry" in k and unofficial and not (claimed and (money_ask or secret_ask)):
         add("card_details_on_link", C.PHISHING, "Asks you to enter card or banking details on a link", SV.HIGH, ST.STRONG, 0.85,

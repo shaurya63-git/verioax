@@ -97,6 +97,7 @@ def classify(keys: set[str], claimed: list[str], level: RiskLevel, top_category:
          or (has("crypto_context") and bool(any_of({"cash_giveaway_signup", "celebrity_giveaway", "gambling_crypto_promo", "giveaway_link"})))),
         ("crypto_wallet", bool(any_of({"seed_phrase_request", "wallet_connect_lure", "wallet_drainer_link"})) or bool(ent & _CRYPTO_BRANDS)),
         ("upi_payment", bool(any_of({"upi_collect_trick", "accidental_transfer"}))),
+        ("bank_phishing", has("card_details_request")),
         ("otp_theft", has("credential_request")),
         ("support_scam", bool(any_of({"remote_access", "tech_support_scare", "support_scare_call", "fake_helpline"}))),
         ("e_challan", "parivahan" in ent and not hoaxish),

@@ -62,11 +62,12 @@ def _compile(patterns: tuple[str, ...]) -> list[re.Pattern]:
 
 SECRET = (r"(?:otp|one[\s-]?time\s+pass(?:word|code)|verification\s+code|security\s+code|login\s+code|(?:6|six|4|four)[\s-]?digit\s+code|"
           r"(?:the\s+)?code\s+(?:you|we)\s+(?:just\s+)?(?:received|got|sent)|upi\s*pin|m-?pin|atm\s*pin|\bpin\b|cvv|"
-          r"card\s+(?:number|details|no)|expiry(?:\s+date)?|net\s?banking\s+(?:password|details|credentials|id)|login\s+(?:details|credentials|id|password)|"
+          r"card\s+(?:(?:\d{1,2}|sixteen)[\s-]?digits?\s+)?(?:number|details|no)|(?:16|sixteen)[\s-]?digits?\s+(?:card\s+)?number|cvc|card\s+verification\s+(?:value|code)|"
+          r"expiry(?:\s+(?:date|month))?|net\s?banking\s+(?:password|details|credentials|id)|login\s+(?:details|credentials|id|password)|"
           r"password|user\s?id)")
 # Secrets that a genuine message would never ask you to type in from an SMS (an OTP is different: genuine OTP messages
 # do say "enter this OTP on the website").
-BANKING_SECRET = (r"(?:upi\s*pin|m-?pin|atm\s*pin|cvv|card\s+(?:number|details|no)|expiry(?:\s+date)?|"
+BANKING_SECRET = (r"(?:upi\s*pin|m-?pin|atm\s*pin|cvv|cvc|card\s+(?:(?:\d{1,2}|sixteen)[\s-]?digits?\s+)?(?:number|details|no)|expiry(?:\s+(?:date|month))?|"
                   r"net\s?banking\s+(?:password|details|credentials|id)|login\s+(?:details|credentials|password))")
 ASK = (r"(?:share|send|tell|provide|give|forward|reply\s+with|"
        r"bata(?:o|yein|ye|na|iye)?|bhej(?:o|ein|e|na|iye)?|de\s?do|dijiye|likh\s+kar\s+bhej\w*)")
@@ -143,7 +144,9 @@ INDICATORS: tuple[Indicator, ...] = (
               "Decline the request. Only enter your UPI PIN when you are the one paying."),
     Indicator("credential_request", C.OTP_SCAM, "Asks for an OTP, PIN, CVV or password", SV.CRITICAL, ST.STRONG, 0.88,
               (rf"\b{ASK}\b[^.\n]{{0,30}}\b{SECRET}", rf"\b{SECRET}\b[^.\n]{{0,25}}\b(?:share|send|bata(?:o|yein|ye)?|bhej(?:o|ein|e)?|batana|bhejna)\b",
-               r"\b(?:tell|share|send|read\s+out|forward|give)\s+(?:me|us)\s+(?:the|that|this)\s+(?:\d[\s-]?digit\s+)?code\b"),
+               r"\b(?:tell|share|send|read\s+out|forward|give)\s+(?:me|us)\s+(?:the|that|this)\s+(?:\d[\s-]?digit\s+)?code\b",
+               # "provide your HDFC credit card 16 digit number, cvv, expiry month/year": the CVV comes after a list
+               rf"\b{ASK}\b[^.\n]{{0,90}}\b(?:cvv|cvc|card\s+verification|expiry\s+(?:date|month))\b"),
               "The message asks for an OTP, PIN, CVV or password. Banks, government offices and delivery companies never ask for these.",
               "Never share OTPs, PINs, CVV or passwords with anyone - not even someone who says they are from your bank.",
               negate_before=NEGATION_BEFORE, negate_after=NEGATION_AFTER,
